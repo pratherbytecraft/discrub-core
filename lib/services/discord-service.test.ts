@@ -999,6 +999,64 @@ describe('DiscordService', () => {
       expect(pages[2].messages).toEqual([]);
     });
 
+    it('surfaces doing_deep_historical_index as stillIndexing on the page (#216)', async () => {
+      let callCount = 0;
+      vi.stubGlobal('fetch', vi.fn(async () => {
+        callCount++;
+        return {
+          ok: true,
+          status: 200,
+          json: async () =>
+            callCount === 1
+              ? { messages: [], total_results: 0, doing_deep_historical_index: true }
+              : { messages: [], total_results: 0 },
+        };
+      }));
+
+      const pages: any[] = [];
+      for await (const page of service.iterateSearchResults({
+        token: testAuth,
+        channelId: testChannelId,
+        guildId: testGuildId,
+        criteria: baseSearchCriteria,
+      })) {
+        pages.push(page);
+      }
+
+      // Initial-empty fast path yields exactly one page — and it carries
+      // the indexing flag so callers can explain the empty result.
+      expect(pages).toHaveLength(1);
+      expect(pages[0].stillIndexing).toBe(true);
+      expect(pages[0].totalResults).toBe(0);
+    });
+
+    it('reports stillIndexing false on ordinary indexed responses (#216)', async () => {
+      let callCount = 0;
+      vi.stubGlobal('fetch', vi.fn(async () => {
+        callCount++;
+        return {
+          ok: true,
+          status: 200,
+          json: async () =>
+            callCount === 1
+              ? { messages: [[makeMessage('1')]], total_results: 1, doing_deep_historical_index: false }
+              : { messages: [], total_results: 1 },
+        };
+      }));
+
+      const pages: any[] = [];
+      for await (const page of service.iterateSearchResults({
+        token: testAuth,
+        channelId: testChannelId,
+        guildId: testGuildId,
+        criteria: baseSearchCriteria,
+      })) {
+        pages.push(page);
+      }
+
+      expect(pages[0].stillIndexing).toBe(false);
+    });
+
     it('propagates thrown errors from failed fetches', async () => {
       vi.stubGlobal('fetch', mockFetchError(401));
 

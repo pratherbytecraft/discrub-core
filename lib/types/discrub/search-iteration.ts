@@ -23,6 +23,14 @@ export type SearchIterationPage = {
    * to the user when set so silent data loss becomes visible.
    */
   incomplete?: boolean;
+  /**
+   * True when Discord reported `doing_deep_historical_index` on this
+   * page's response — the search index for this channel/guild is still
+   * being built, so empty/short results may not mean "no matches"
+   * (#216). Callers should tell the user to retry later rather than
+   * reporting a bare zero.
+   */
+  stillIndexing?: boolean;
 };
 
 export type SearchIterationOptions = {

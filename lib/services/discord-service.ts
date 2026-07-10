@@ -617,6 +617,7 @@ class DiscordService {
         totalResults,
         pageIndex,
         aggregatedCount,
+        stillIndexing: searchResult.doing_deep_historical_index === true,
       };
       pageIndex++;
 

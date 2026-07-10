@@ -731,11 +731,36 @@ describe('html-formatting-utils', () => {
 
     it('renders a bare image embed as a linked image with no card div', () => {
       const result = renderEmbedAsHtml(bareImage);
-      expect(result).toContain('class="embed-image"');
+      expect(result).toContain('class="embed-image bare-embed-image"');
       expect(result).toContain('src="https://cdn.7tv.app/emote/01FCY771D800007PQ2DF3GDTN6/4x.webp"');
       expect(result).toContain('href="https://cdn.7tv.app/emote/01FCY771D800007PQ2DF3GDTN6/4x.webp"');
       expect(result).not.toContain('class="embed"');
       expect(result).not.toContain('border-left');
+    });
+
+    it('emits natural dimensions so stylesheets cannot upscale a small unfurl', () => {
+      const result = renderEmbedAsHtml(bareImage);
+      expect(result).toContain('width="128" height="128"');
+    });
+
+    it('caps emitted dimensions to the 400x300 inline box without upscaling', () => {
+      const wide: Embed = {
+        ...bareImage,
+        thumbnail: { ...bareImage.thumbnail!, width: 1920, height: 1080 },
+      };
+      const result = renderEmbedAsHtml(wide);
+      // 1920x1080 scaled by min(400/1920, 300/1080) = 400x225.
+      expect(result).toContain('width="400" height="225"');
+    });
+
+    it('omits dimension attributes when the capture has none', () => {
+      const dimless: Embed = {
+        ...bareImage,
+        thumbnail: { url: bareImage.thumbnail!.url },
+      };
+      const result = renderEmbedAsHtml(dimless);
+      expect(result).toContain('class="embed-image bare-embed-image"');
+      expect(result).not.toContain('width=');
     });
 
     it('routes the bare image through mediaMap for offline exports', () => {
@@ -764,8 +789,22 @@ describe('html-formatting-utils', () => {
       };
       const result = renderEmbedAsHtml(embed);
       expect(result).not.toContain('<video');
-      expect(result).toContain('class="embed-image"');
+      expect(result).toContain('class="embed-image');
       expect(result).toContain('src="https://media1.tenor.com/m/x/tackle.gif"');
+    });
+
+    it('plays a downloaded gifv video even when its remote URL is not directly playable', () => {
+      // Mirrors the card path: a mediaMap hit is a local file, always
+      // playable, so the extension check applies to remote URLs only.
+      const embed: Embed = {
+        ...gifv,
+        video: { url: 'https://tenor.com/embed/player/10629045' },
+      };
+      const result = renderEmbedAsHtml(embed, {
+        mediaMap: { 'https://tenor.com/embed/player/10629045': 'media/embed-videos/1_1.mp4' },
+      });
+      expect(result).toContain('<video');
+      expect(result).toContain('src="media/embed-videos/1_1.mp4"');
     });
 
     it('keeps the card for an image-typed embed that carries real card content', () => {

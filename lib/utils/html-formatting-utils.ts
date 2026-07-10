@@ -372,16 +372,26 @@ export const renderEmbedAsHtml = (
   // video URL isn't directly playable, fall back to the thumbnail, which
   // GIF services serve as an actual .gif.
   if (isBareMediaEmbed(embed)) {
-    if (
-      includeVideos &&
-      embed.type === EmbedType.GIFV &&
-      embed.video?.url &&
-      isDirectlyPlayableVideo(embed.video.url)
-    ) {
-      return `<video class="embed-video" autoplay loop muted playsinline src="${escapeHtml(resolveMedia(embed.video.url))}"></video>`;
+    if (includeVideos && embed.type === EmbedType.GIFV && embed.video?.url) {
+      // Same contract as the card path below: a mediaMap hit is a local
+      // download and always playable; only remote URLs need the
+      // direct-playability check (a Tenor player PAGE is not a video src).
+      const resolvedVideo = resolveMedia(embed.video.url);
+      if (resolvedVideo !== embed.video.url || isDirectlyPlayableVideo(resolvedVideo)) {
+        return `<video class="embed-video" autoplay loop muted playsinline src="${escapeHtml(resolvedVideo)}"></video>`;
+      }
     }
     if (includeImages && embed.thumbnail?.url) {
-      const img = `<img class="embed-image" src="${escapeHtml(resolveMedia(embed.thumbnail.url))}" alt="">`;
+      // Natural dimensions, capped to Discord's ~400x300 inline box and
+      // never upscaled — without them, card-oriented stylesheets stretch a
+      // small unfurl (e.g. a 128px emote) to the full card width.
+      const { width, height } = embed.thumbnail;
+      let dims = '';
+      if (width && height) {
+        const scale = Math.min(1, 400 / width, 300 / height);
+        dims = ` width="${Math.round(width * scale)}" height="${Math.round(height * scale)}"`;
+      }
+      const img = `<img class="embed-image bare-embed-image"${dims} src="${escapeHtml(resolveMedia(embed.thumbnail.url))}" alt="">`;
       return embed.url
         ? `<a href="${escapeHtml(embed.url)}" target="_blank" rel="noopener noreferrer">${img}</a>`
         : img;

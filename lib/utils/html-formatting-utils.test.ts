@@ -707,4 +707,108 @@ describe('html-formatting-utils', () => {
       expect(result).toContain('embed-image');
     });
   });
+
+  describe('renderEmbedAsHtml bare media embeds (#219)', () => {
+    // Shapes taken from a live Discord capture of bare-URL unfurls.
+    const bareImage: Embed = {
+      type: EmbedType.IMAGE,
+      url: 'https://cdn.7tv.app/emote/01FCY771D800007PQ2DF3GDTN6/4x.webp',
+      thumbnail: {
+        url: 'https://cdn.7tv.app/emote/01FCY771D800007PQ2DF3GDTN6/4x.webp',
+        width: 128,
+        height: 128,
+      },
+    };
+
+    const gifv: Embed = {
+      type: EmbedType.GIFV,
+      url: 'https://tenor.com/view/tackle-mascot-gif-10629045',
+      title: 'Tackle Mascot GIF - Discover & Share GIFs',
+      provider: { name: 'Tenor', url: 'https://tenor.co' },
+      thumbnail: { url: 'https://media1.tenor.com/m/x/tackle.gif', width: 444, height: 250 },
+      video: { url: 'https://media.tenor.com/x/tackle.mp4', width: 444, height: 250 },
+    };
+
+    it('renders a bare image embed as a linked image with no card div', () => {
+      const result = renderEmbedAsHtml(bareImage);
+      expect(result).toContain('class="embed-image"');
+      expect(result).toContain('src="https://cdn.7tv.app/emote/01FCY771D800007PQ2DF3GDTN6/4x.webp"');
+      expect(result).toContain('href="https://cdn.7tv.app/emote/01FCY771D800007PQ2DF3GDTN6/4x.webp"');
+      expect(result).not.toContain('class="embed"');
+      expect(result).not.toContain('border-left');
+    });
+
+    it('routes the bare image through mediaMap for offline exports', () => {
+      const result = renderEmbedAsHtml(bareImage, {
+        mediaMap: {
+          'https://cdn.7tv.app/emote/01FCY771D800007PQ2DF3GDTN6/4x.webp':
+            'media/embed-thumbnails/1_1.webp',
+        },
+      });
+      expect(result).toContain('src="media/embed-thumbnails/1_1.webp"');
+    });
+
+    it('renders a gifv embed as a muted autoplay loop, hiding provider title and card', () => {
+      const result = renderEmbedAsHtml(gifv);
+      expect(result).toContain('class="embed-video"');
+      expect(result).toContain('autoplay loop muted playsinline');
+      expect(result).toContain('src="https://media.tenor.com/x/tackle.mp4"');
+      expect(result).not.toContain('Tackle Mascot');
+      expect(result).not.toContain('class="embed"');
+    });
+
+    it('falls back to the gif thumbnail when the gifv video is not directly playable', () => {
+      const embed: Embed = {
+        ...gifv,
+        video: { url: 'https://tenor.com/embed/player/10629045' },
+      };
+      const result = renderEmbedAsHtml(embed);
+      expect(result).not.toContain('<video');
+      expect(result).toContain('class="embed-image"');
+      expect(result).toContain('src="https://media1.tenor.com/m/x/tackle.gif"');
+    });
+
+    it('keeps the card for an image-typed embed that carries real card content', () => {
+      const embed: Embed = {
+        ...bareImage,
+        title: 'A bot made this',
+        description: 'with actual card content',
+      };
+      const result = renderEmbedAsHtml(embed);
+      expect(result).toContain('class="embed"');
+      expect(result).toContain('A bot made this');
+    });
+
+    it('falls back to a plain source link when images are excluded', () => {
+      const result = renderEmbedAsHtml(bareImage, { includeImages: false });
+      expect(result).not.toContain('<img');
+      expect(result).toContain('href="https://cdn.7tv.app/emote/01FCY771D800007PQ2DF3GDTN6/4x.webp"');
+    });
+
+    it('renders a card-embed player-page video URL as a watch link, not a broken <video> (#219 sweep)', () => {
+      const embed: Embed = {
+        type: EmbedType.VIDEO,
+        title: 'Some YouTube video',
+        url: 'https://www.youtube.com/watch?v=abc123',
+        video: { url: 'https://www.youtube.com/embed/abc123' },
+      };
+      const result = renderEmbedAsHtml(embed);
+      expect(result).not.toContain('<video');
+      expect(result).toContain('class="embed-video-link"');
+      expect(result).toContain('href="https://www.youtube.com/watch?v=abc123"');
+    });
+
+    it('still plays a card-embed video when mediaMap resolved it to a local file', () => {
+      const embed: Embed = {
+        type: EmbedType.VIDEO,
+        title: 'Some video',
+        video: { url: 'https://www.youtube.com/embed/abc123' },
+      };
+      const result = renderEmbedAsHtml(embed, {
+        mediaMap: { 'https://www.youtube.com/embed/abc123': 'media/embed-videos/1_1.mp4' },
+      });
+      expect(result).toContain('<video');
+      expect(result).toContain('src="media/embed-videos/1_1.mp4"');
+    });
+  });
 });

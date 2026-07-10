@@ -3,6 +3,7 @@ import { MessageRegex } from '../regex/index.ts';
 import { parseSpecialFormatting } from './message-formatting-utils.ts';
 import type { HtmlFormattingContext, EmbedRenderOptions } from '../types/html-formatting-types.ts';
 import type { Embed } from '../types/discord-types.ts';
+import { EmbedType } from '../enum/discord-enum.ts';
 
 /**
  * Escape HTML special characters to prevent XSS
@@ -313,7 +314,41 @@ const colorToHex = (color?: number): string => {
 };
 
 /**
+ * A URL a <video> element can actually play, as opposed to an embed-player
+ * page URL (e.g. a YouTube /embed/ link, which Discord puts in
+ * `embed.video.url` for video-type unfurls).
+ */
+const isDirectlyPlayableVideo = (url: string): boolean =>
+  url.includes('.mp4') || url.includes('.webm');
+
+/**
+ * A bare media embed renders as the inline media itself, without embed-card
+ * chrome. Discord auto-embeds a pasted image URL as `type:'image'` with the
+ * media in `embed.thumbnail`, and a GIF-service page URL as `type:'gifv'`
+ * with a looping `embed.video`; its client shows both as plain inline media
+ * and hides the card entirely. GIFV unfurls carry provider title text that
+ * Discord never displays, so GIFV is bare regardless of card-ish fields;
+ * IMAGE stays card-rendered if a bot attached real card content to it.
+ */
+export const isBareMediaEmbed = (embed: Embed): boolean => {
+  if (embed.type === EmbedType.GIFV) return !!(embed.video?.url || embed.thumbnail?.url);
+  if (embed.type !== EmbedType.IMAGE) return false;
+  const hasCardContent = !!(
+    embed.title ||
+    embed.description ||
+    embed.fields?.length ||
+    embed.author?.name ||
+    embed.footer
+  );
+  return !hasCardContent && !!embed.thumbnail?.url;
+};
+
+/**
  * Render a Discord embed as HTML
+ *
+ * Bare image/gifv unfurls render as the media alone (`.embed-image` /
+ * `.embed-video`, no `.embed` card); everything else renders the classic
+ * card structure.
  *
  * @param embed Discord embed object
  * @param options Render options (includeImages, includeVideos)
@@ -331,6 +366,32 @@ export const renderEmbedAsHtml = (
   // degrade; the HTML still renders, just won't work offline for that item).
   const resolveMedia = (url: string): string =>
     mediaMap?.[url] ?? url;
+
+  // #219: bare image/gifv unfurls — the media IS the message. No card div,
+  // no color stripe. GIFV plays like a GIF (muted autoplay loop); when its
+  // video URL isn't directly playable, fall back to the thumbnail, which
+  // GIF services serve as an actual .gif.
+  if (isBareMediaEmbed(embed)) {
+    if (
+      includeVideos &&
+      embed.type === EmbedType.GIFV &&
+      embed.video?.url &&
+      isDirectlyPlayableVideo(embed.video.url)
+    ) {
+      return `<video class="embed-video" autoplay loop muted playsinline src="${escapeHtml(resolveMedia(embed.video.url))}"></video>`;
+    }
+    if (includeImages && embed.thumbnail?.url) {
+      const img = `<img class="embed-image" src="${escapeHtml(resolveMedia(embed.thumbnail.url))}" alt="">`;
+      return embed.url
+        ? `<a href="${escapeHtml(embed.url)}" target="_blank" rel="noopener noreferrer">${img}</a>`
+        : img;
+    }
+    // Media excluded by options: fall back to a plain source link.
+    if (embed.url) {
+      return `<a href="${escapeHtml(embed.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(embed.url)}</a>`;
+    }
+    return '';
+  }
 
   let embedHtml = `<div class="embed" style="border-left: 4px solid ${colorHex}">`;
 
@@ -387,9 +448,18 @@ export const renderEmbedAsHtml = (
     embedHtml += `<img class="embed-image" src="${escapeHtml(resolveMedia(embed.image.url))}" alt="">`;
   }
 
-  // Video
+  // Video. Embed-player page URLs (YouTube /embed/ links etc.) are not
+  // media files — a <video> tag renders a broken player for them (#219
+  // sweep; mirrors the in-app feed's "View video" fallback). Resolve first:
+  // a downloaded local copy is always playable.
   if (includeVideos && embed.video?.url) {
-    embedHtml += `<video class="embed-video" controls src="${escapeHtml(resolveMedia(embed.video.url))}"></video>`;
+    const resolved = resolveMedia(embed.video.url);
+    if (resolved !== embed.video.url || isDirectlyPlayableVideo(resolved)) {
+      embedHtml += `<video class="embed-video" controls src="${escapeHtml(resolved)}"></video>`;
+    } else {
+      const watchUrl = embed.url || embed.video.url;
+      embedHtml += `<a class="embed-video-link" href="${escapeHtml(watchUrl)}" target="_blank" rel="noopener noreferrer">▶ Watch video</a>`;
+    }
   }
 
   // Footer

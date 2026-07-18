@@ -5,6 +5,22 @@ All notable changes to `discrub-core` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.6] - 2026-07-18
+
+### Added
+
+- **Search-indexing state on search results (#216).** Search responses now
+  surface Discord's `doing_deep_historical_index` flag so consumers can warn
+  when a still-indexing guild may return incomplete results.
+
+### Changed
+
+- **Bare image/gifv embeds render as inline media (#219).** Link-only image
+  and gifv embeds format as Discord-style inline media instead of embed
+  cards, with capped natural-size dimensions on bare images. Gifv
+  playability is decided on the RESOLVED URL, so a downloaded local copy
+  always plays even when the remote URL is a provider player page.
+
 ## [1.0.5] - 2026-06-27
 
 ### Added

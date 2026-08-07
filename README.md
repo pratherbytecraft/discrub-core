@@ -1,6 +1,6 @@
 # discrub-core
 
-Core library powering [Discrub](https://github.com/prathercc/discrub-web) — a Discord data management tool for exporting, purging, and analyzing your Discord messages.
+Core library powering [Discrub](https://github.com/pratherbytecraft/discrub): a Discord data management tool for exporting, purging, and analyzing your Discord messages.
 
 Handles all Discord API communication, message processing, export data preparation, HTML formatting, reaction enrichment, and user data enrichment.
 
@@ -214,11 +214,11 @@ npm run lint
 
 ## License
 
-All rights reserved. © 2024-2026 prathercc. See [LICENSE](./LICENSE).
+All rights reserved. © 2024-2026 Prather Bytecraft. See [LICENSE](./LICENSE).
 
 The source code in this repository is publicly visible for transparency and
 security review. discrub-core is published to npm to support Discrub's build
 pipeline; it is not licensed for use by other parties without explicit
 permission from the copyright holder.
 
-"Discrub" and the Discrub logo are trademarks of prathercc.
+"Discrub" and the Discrub logo are trademarks of Prather Bytecraft.

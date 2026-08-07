@@ -3,15 +3,15 @@
   "private": false,
   "version": "1.0.6",
   "license": "UNLICENSED",
-  "author": "prathercc",
+  "author": "Prather Bytecraft",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/prathercc/discrub-core.git"
+    "url": "git+https://github.com/pratherbytecraft/discrub-core.git"
   },
   "bugs": {
-    "url": "https://github.com/prathercc/discrub-core/issues"
+    "url": "https://github.com/pratherbytecraft/discrub-core/issues"
   },
-  "homepage": "https://github.com/prathercc/discrub-core#readme",
+  "homepage": "https://github.com/pratherbytecraft/discrub-core#readme",
   "type": "module",
   "exports": {
     "./discord-service": {

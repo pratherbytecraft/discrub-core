@@ -399,6 +399,50 @@ describe('DiscordService', () => {
       expect(console.warn).not.toHaveBeenCalled();
     });
 
+    it('should default autoDelay to true', () => {
+      expect(new DiscordService().autoDelay).toBe(true);
+      expect(new DiscordService(undefined, {}).autoDelay).toBe(true);
+      expect(new DiscordService(undefined, { autoDelay: true }).autoDelay).toBe(true);
+    });
+
+    it('should skip the search delay when autoDelay is false (#241)', async () => {
+      const settings: AppSettings = {
+        searchDelay2: 1,
+        deleteDelay2: 0,
+        delayModifier2: 0,
+      } as AppSettings;
+      const rawService = new DiscordService(settings, { autoDelay: false });
+      const onDelay = vi.fn();
+      rawService.onDelay = onDelay;
+      vi.stubGlobal('fetch', mockFetchSuccess(mockUser));
+
+      const startTime = Date.now();
+      await rawService.getUser(testAuth, testUserId); // Uses delayType: "search"
+      const elapsed = Date.now() - startTime;
+
+      expect(elapsed).toBeLessThan(100); // Should be nearly instant
+      expect(onDelay).not.toHaveBeenCalled();
+    });
+
+    it('should skip the delete delay when autoDelay is false (#241)', async () => {
+      const settings: AppSettings = {
+        searchDelay2: 0,
+        deleteDelay2: 1,
+        delayModifier2: 0,
+      } as AppSettings;
+      const rawService = new DiscordService(settings, { autoDelay: false });
+      const onDelay = vi.fn();
+      rawService.onDelay = onDelay;
+      vi.stubGlobal('fetch', mockFetchSuccess(undefined));
+
+      const startTime = Date.now();
+      await rawService.deleteMessage(testAuth, testMessageId, testChannelId);
+      const elapsed = Date.now() - startTime;
+
+      expect(elapsed).toBeLessThan(100); // Should be nearly instant
+      expect(onDelay).not.toHaveBeenCalled();
+    });
+
     it('should handle delay with minimum of 0 when modifier exceeds delay', async () => {
       const settings: AppSettings = {
         searchDelay2: 0.05, // 50ms

@@ -26,10 +26,24 @@ import { DiscrubSetting } from "../enum/discrub-enum.ts";
 import { wait } from "../utils/common-utils.ts";
 import { SettingsHelper } from "../utils/settings-utils.ts";
 
+interface DiscordServiceOptions {
+  /**
+   * When false, the service never sleeps before a request — the
+   * search/delete delay settings are ignored and pacing is entirely
+   * the caller's responsibility (#241: consumers whose loops already
+   * sleep between calls were paying every delay twice). Defaults to
+   * true, which preserves the self-pacing behavior relied on by the
+   * enrichment services and other adapter-driven flows that have no
+   * pacing of their own.
+   */
+  autoDelay?: boolean;
+}
+
 class DiscordService {
   searchDelaySecs = 0;
   deleteDelaySecs = 0;
   delayModifierSecs = 0;
+  autoDelay = true;
   onRateLimit?: (retryAfter: number) => void;
   onDelay?: (delaySecs: number, delayType: 'search' | 'delete') => void;
   DISCORD_API_URL = "https://discord.com/api/v10";
@@ -37,12 +51,13 @@ class DiscordService {
   DISCORD_GUILDS_ENDPOINT = `${this.DISCORD_API_URL}/guilds`;
   DISCORD_CHANNELS_ENDPOINT = `${this.DISCORD_API_URL}/channels`;
 
-  constructor(settings?: AppSettings) {
+  constructor(settings?: AppSettings, options?: DiscordServiceOptions) {
     if (settings) {
       this.searchDelaySecs = SettingsHelper.getNumber(settings, DiscrubSetting.SEARCH_DELAY, 0);
       this.deleteDelaySecs = SettingsHelper.getNumber(settings, DiscrubSetting.DELETE_DELAY, 0);
       this.delayModifierSecs = SettingsHelper.getNumber(settings, DiscrubSetting.DELAY_MODIFIER, 0);
     }
+    this.autoDelay = options?.autoDelay ?? true;
   }
 
   generateSnowflake = (date: Date = new Date()): string =>
@@ -62,7 +77,7 @@ class DiscordService {
     func: () => Promise<DiscordApiResponse<T>>,
     delayType: "search" | "delete" | "none",
   ): Promise<DiscordApiResponse<T>> {
-    if (delayType === "none") {
+    if (delayType === "none" || !this.autoDelay) {
       return func();
     }
 
@@ -468,9 +483,13 @@ class DiscordService {
    * - 202 Accepted with `retry_after` is returned when an entity isn't yet
    *   indexed; we sleep and retry the same fetch.
    *
-   * The generator does NOT delay between pages on its own. Callers inject
-   * their own delay + cancellation via `options.onBetweenPages` (return
-   * `true` to stop) and `options.shouldStop` (polled before each request).
+   * Pacing: each page fetch goes through the service's search delay
+   * (unless the service was constructed with `autoDelay: false`), and
+   * callers may additionally inject delay + cancellation via
+   * `options.onBetweenPages` (return `true` to stop) and
+   * `options.shouldStop` (polled before each request). Callers that
+   * pace via `onBetweenPages` should run with `autoDelay: false` so
+   * pages aren't delayed twice (#241).
    *
    * Discord's search response is shaped `Message[][]` (legacy nested
    * format); under current API each inner array contains the hit only,
@@ -833,3 +852,4 @@ class DiscordService {
 }
 
 export { DiscordService };
+export type { DiscordServiceOptions };

@@ -5,6 +5,20 @@ All notable changes to `discrub-core` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`DiscordService` `autoDelay` constructor option (#241).** `new
+  DiscordService(settings, { autoDelay: false })` disables the service's
+  built-in pre-request delays entirely, for consumers whose call sites pace
+  themselves — previously such loops paid every delay twice (the service's
+  pre-request sleep plus their own between-call sleep). Defaults to `true`,
+  preserving self-pacing for adapter-driven flows (e.g. the enrichment
+  services) that have no pacing of their own. The delay fields
+  (`searchDelaySecs` etc.) are still populated from settings either way, so
+  consumers that read them for their own pacing are unaffected.
+
 ## [1.0.6] - 2026-07-18
 
 ### Added

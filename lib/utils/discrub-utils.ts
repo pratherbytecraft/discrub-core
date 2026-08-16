@@ -243,7 +243,7 @@ export const entityIsImage = (entity: Attachment | Embed) => {
   if (isAttachment(entity)) {
     return Boolean(
       entity.content_type?.includes("image") ||
-        ["png", "jpg", "jpeg", "gif"].some((sit) =>
+        ["png", "jpg", "jpeg", "gif", "webp"].some((sit) =>
           entity.filename.includes(sit),
         ),
     );

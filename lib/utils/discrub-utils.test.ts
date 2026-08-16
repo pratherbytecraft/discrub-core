@@ -515,6 +515,11 @@ describe('discrub-utils', () => {
         expect(entityIsImage(attachment)).toBe(true);
       });
 
+      it('should detect a webp attachment by filename when content_type is absent (#234)', () => {
+        const attachment = { filename: 'sticker.webp' } as Attachment;
+        expect(entityIsImage(attachment)).toBe(true);
+      });
+
       it('should detect rich embed as image', () => {
         const embed = { type: EmbedType.RICH } as Embed;
         expect(entityIsImage(embed)).toBe(true);

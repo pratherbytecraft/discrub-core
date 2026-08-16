@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`entityIsImage` now recognizes webp filenames (#234).** The
+  filename-extension fallback (used when an attachment carries no
+  `content_type`) covered png/jpg/jpeg/gif but not webp, so a webp
+  attachment without a content type was not classified as an image.
+
 ### Added
 
 - **`DiscordService` `autoDelay` constructor option (#241).** `new

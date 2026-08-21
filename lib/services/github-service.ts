@@ -66,3 +66,29 @@ export const fetchDonationData = (): Promise<Donation[]> =>
     "contributions.json",
     "Error fetching donations",
   );
+
+/**
+ * Fetches the supporter-key revocation list (revoked jti values) from
+ * the donation gist. The file is a rare-remedy tool and is normally
+ * absent, so absence is not logged as an error; any missing file,
+ * fetch failure, or parse failure resolves to an empty list so key
+ * verification fails open.
+ * @returns Promise containing array of revoked key ids
+ */
+export const fetchRevokedSupporterKeys = (): Promise<string[]> =>
+  fetch(DONATION_ENDPOINT, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  })
+    .then(async (resp) => {
+      const gistData = await resp.json();
+      const content = gistData?.files?.["revoked_keys.json"]?.content;
+      if (!content) return [];
+      const parsed = JSON.parse(content);
+      return Array.isArray(parsed)
+        ? parsed.filter((jti): jti is string => typeof jti === "string")
+        : [];
+    })
+    .catch(() => []);

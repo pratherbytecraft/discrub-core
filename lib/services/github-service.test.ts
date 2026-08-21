@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { fetchAnnouncementData, fetchAnnouncementMarkdown, fetchDonationData } from './github-service.ts';
+import { fetchAnnouncementData, fetchAnnouncementMarkdown, fetchDonationData, fetchRevokedSupporterKeys } from './github-service.ts';
 import type { Announcement, Donation } from '../types/discrub-types.ts';
 
 describe('GitHubService', () => {
@@ -303,6 +303,77 @@ describe('GitHubService', () => {
       expect(result).toContain('**Bold**');
       expect(result).toContain('_italic_');
       expect(result).toContain('[link](url)');
+    });
+  });
+
+  describe('Revoked Supporter Key Fetching', () => {
+    it('should fetch revoked key ids from the donation gist', async () => {
+      const mockGistResponse = {
+        files: {
+          'contributions.json': { content: '[]' },
+          'revoked_keys.json': { content: JSON.stringify(['a1b2c3d4', 'e5f6a7b8']) },
+        },
+      };
+
+      const mockFetch = vi.fn().mockResolvedValue({
+        json: async () => mockGistResponse,
+      });
+      vi.stubGlobal('fetch', mockFetch);
+
+      const result = await fetchRevokedSupporterKeys();
+
+      expect(result).toEqual(['a1b2c3d4', 'e5f6a7b8']);
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('gists/eb9a7ef2cf49ecab72adebeacea420bf'),
+        expect.objectContaining({ method: 'GET' })
+      );
+    });
+
+    it('should resolve to an empty list when the file is absent, without logging', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        json: async () => ({ files: { 'contributions.json': { content: '[]' } } }),
+      });
+      vi.stubGlobal('fetch', mockFetch);
+
+      const result = await fetchRevokedSupporterKeys();
+
+      expect(result).toEqual([]);
+      expect(console.error).not.toHaveBeenCalled();
+    });
+
+    it('should resolve to an empty list on fetch failure (fail open)', async () => {
+      const mockFetch = vi.fn().mockRejectedValue(new Error('Network error'));
+      vi.stubGlobal('fetch', mockFetch);
+
+      const result = await fetchRevokedSupporterKeys();
+
+      expect(result).toEqual([]);
+    });
+
+    it('should resolve to an empty list on malformed content', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        json: async () => ({ files: { 'revoked_keys.json': { content: 'not json' } } }),
+      });
+      vi.stubGlobal('fetch', mockFetch);
+
+      const result = await fetchRevokedSupporterKeys();
+
+      expect(result).toEqual([]);
+    });
+
+    it('should drop non-string entries from the list', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        json: async () => ({
+          files: {
+            'revoked_keys.json': { content: JSON.stringify(['ok', 42, null, 'also-ok']) },
+          },
+        }),
+      });
+      vi.stubGlobal('fetch', mockFetch);
+
+      const result = await fetchRevokedSupporterKeys();
+
+      expect(result).toEqual(['ok', 'also-ok']);
     });
   });
 

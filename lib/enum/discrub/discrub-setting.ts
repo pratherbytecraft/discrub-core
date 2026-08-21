@@ -27,6 +27,7 @@ export enum DiscrubSetting {
   APP_SHOW_KOFI_FEED = "appShowKoFiFeed",
   APP_USER_DATA_REFRESH_RATE = "appUserDataRefreshRate",
   APP_THEME_MODE = "appThemeMode",
+  APP_THEME_ANIMATIONS = "appThemeAnimations",
 
   EXPORT_MEDIA_IMAGES = "exportMediaImages",
   EXPORT_MEDIA_VIDEOS = "exportMediaVideos",

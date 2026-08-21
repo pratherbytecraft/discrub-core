@@ -25,6 +25,7 @@ type AppSettingsMap = {
   [DiscrubSetting.APP_SHOW_KOFI_FEED]: string;
   [DiscrubSetting.APP_USER_DATA_REFRESH_RATE]: string;
   [DiscrubSetting.APP_THEME_MODE]: string;
+  [DiscrubSetting.APP_THEME_ANIMATIONS]: string;
   [DiscrubSetting.EXPORT_MEDIA_IMAGES]: string;
   [DiscrubSetting.EXPORT_MEDIA_VIDEOS]: string;
   [DiscrubSetting.EXPORT_MEDIA_AUDIO]: string;

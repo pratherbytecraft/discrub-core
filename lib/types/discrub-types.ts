@@ -1,4 +1,5 @@
 export type { Announcement } from "./discrub/announcement";
+export type { AnnouncementArchiveEntry } from "./discrub/announcement-archive-entry";
 export type { AppSettings } from "./discrub/app-settings";
 export type { AppTaskStatus } from "./discrub/app-task-status";
 export type { DiscordApiResponse } from "./discrub/discord-api-response";

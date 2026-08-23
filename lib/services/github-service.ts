@@ -1,9 +1,14 @@
-import type { Announcement, Donation } from "../types/discrub-types.ts";
+import type {
+  Announcement,
+  AnnouncementArchiveEntry,
+  Donation,
+} from "../types/discrub-types.ts";
 
 const GITHUB_GIST_URL = "https://api.github.com/gists";
 const ANNOUNCEMENT_ENDPOINT = `${GITHUB_GIST_URL}/e5558088744dbe52edca729425900a69`;
 const DONATION_ENDPOINT = `${GITHUB_GIST_URL}/eb9a7ef2cf49ecab72adebeacea420bf`;
 const ANNOUNCEMENT_MARKDOWN_ENDPOINT = `${GITHUB_GIST_URL}/a73736574a1a994e97cbc2d6f467c574`;
+const ANNOUNCEMENT_ARCHIVE_ENDPOINT = `${GITHUB_GIST_URL}/d57525174377b474cb7c90210d3ab979`;
 
 const fetchGist = <T>(
   endpoint: string,
@@ -92,3 +97,53 @@ export const fetchRevokedSupporterKeys = (): Promise<string[]> =>
         : [];
     })
     .catch(() => []);
+
+type ArchiveIndexRow = { version?: unknown; date?: unknown; title?: unknown; file?: unknown };
+
+/**
+ * Fetches the past-announcements archive: a public gist holding `index.json`
+ * (rows ordered newest first: version, date, title, file) plus one markdown
+ * file per release. The gist API returns every file's content inline, so the
+ * whole archive is one request. Rows whose file is missing, truncated, or
+ * malformed are skipped; any fetch or parse failure resolves to an empty list
+ * so the dialog can show "nothing to browse" instead of breaking.
+ * @returns Promise containing archive entries, newest first
+ */
+export const fetchAnnouncementArchive = (): Promise<AnnouncementArchiveEntry[]> =>
+  fetch(ANNOUNCEMENT_ARCHIVE_ENDPOINT, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  })
+    .then(async (resp) => {
+      const gistData = await resp.json();
+      const files = gistData?.files ?? {};
+      const indexContent = files["index.json"]?.content;
+      if (typeof indexContent !== "string") return [];
+      const rows = JSON.parse(indexContent);
+      if (!Array.isArray(rows)) return [];
+      const entries: AnnouncementArchiveEntry[] = [];
+      for (const row of rows as ArchiveIndexRow[]) {
+        if (
+          typeof row?.version !== "string" ||
+          typeof row.date !== "string" ||
+          typeof row.title !== "string" ||
+          typeof row.file !== "string"
+        )
+          continue;
+        const file = files[row.file];
+        if (!file || file.truncated || typeof file.content !== "string") continue;
+        entries.push({
+          version: row.version,
+          date: row.date,
+          title: row.title,
+          markdown: file.content,
+        });
+      }
+      return entries;
+    })
+    .catch((e) => {
+      console.error("Error fetching announcement archive", e);
+      return [];
+    });

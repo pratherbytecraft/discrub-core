@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { fetchAnnouncementData, fetchAnnouncementMarkdown, fetchDonationData, fetchRevokedSupporterKeys } from './github-service.ts';
+import { fetchAnnouncementData, fetchAnnouncementMarkdown, fetchAnnouncementArchive, fetchDonationData, fetchRevokedSupporterKeys } from './github-service.ts';
 import type { Announcement, Donation } from '../types/discrub-types.ts';
 
 describe('GitHubService', () => {
@@ -303,6 +303,82 @@ describe('GitHubService', () => {
       expect(result).toContain('**Bold**');
       expect(result).toContain('_italic_');
       expect(result).toContain('[link](url)');
+    });
+  });
+
+  describe('Announcement Archive Fetching', () => {
+    const archiveGist = {
+      files: {
+        'index.json': {
+          content: JSON.stringify([
+            { version: '2.1.0', date: '2026-08-23', title: 'Discrub 2.1.0', file: '2.1.0.md' },
+            { version: '2.0.10', date: '2026-08-16', title: 'Discrub 2.0.10', file: '2.0.10.md' },
+          ]),
+        },
+        '2.1.0.md': { content: '# What\'s New in Discrub 2.1.0' },
+        '2.0.10.md': { content: '# What\'s New in Discrub 2.0.10' },
+      },
+    };
+
+    it('joins index.json rows with their markdown files in index order, in one request', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({ json: async () => archiveGist });
+      vi.stubGlobal('fetch', mockFetch);
+
+      const result = await fetchAnnouncementArchive();
+
+      expect(result).toEqual([
+        { version: '2.1.0', date: '2026-08-23', title: 'Discrub 2.1.0', markdown: '# What\'s New in Discrub 2.1.0' },
+        { version: '2.0.10', date: '2026-08-16', title: 'Discrub 2.0.10', markdown: '# What\'s New in Discrub 2.0.10' },
+      ]);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringMatching(/api\.github\.com\/gists\//),
+        expect.objectContaining({ method: 'GET' })
+      );
+    });
+
+    it('skips rows whose file is missing, truncated, or malformed', async () => {
+      const gist = {
+        files: {
+          'index.json': {
+            content: JSON.stringify([
+              { version: '2.1.0', date: '2026-08-23', title: 'Discrub 2.1.0', file: '2.1.0.md' },
+              { version: '2.0.10', date: '2026-08-16', title: 'Discrub 2.0.10', file: 'missing.md' },
+              { version: '2.0.9', date: '2026-08-15', title: 'Discrub 2.0.9', file: '2.0.9.md' },
+              { version: 42, file: '2.0.8.md' },
+            ]),
+          },
+          '2.1.0.md': { content: 'ok' },
+          '2.0.9.md': { content: 'partial', truncated: true },
+          '2.0.8.md': { content: 'never used' },
+        },
+      };
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ json: async () => gist }));
+
+      const result = await fetchAnnouncementArchive();
+
+      expect(result.map((e) => e.version)).toEqual(['2.1.0']);
+    });
+
+    it('resolves to an empty list when index.json is absent or not an array', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ json: async () => ({ files: {} }) }));
+      expect(await fetchAnnouncementArchive()).toEqual([]);
+
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        json: async () => ({ files: { 'index.json': { content: '{"not":"an array"}' } } }),
+      }));
+      expect(await fetchAnnouncementArchive()).toEqual([]);
+    });
+
+    it('resolves to an empty list and logs on fetch or parse failure', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Network error')));
+      expect(await fetchAnnouncementArchive()).toEqual([]);
+      expect(console.error).toHaveBeenCalledWith('Error fetching announcement archive', expect.any(Error));
+
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        json: async () => ({ files: { 'index.json': { content: '{bad json' } } }),
+      }));
+      expect(await fetchAnnouncementArchive()).toEqual([]);
     });
   });
 

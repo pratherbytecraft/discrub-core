@@ -56,6 +56,19 @@ describe('messages/utils', () => {
       expect(result.isEndConditionMet).toBe(false);
     });
 
+    it('keeps attachment criteria across the MAX_OFFSET cap shift (GH #13)', () => {
+      const criteria: SearchCriteria = {
+        ...baseCriteria,
+        attachmentExtensions: ['png', 'pdf'],
+        attachmentFilename: 'Report.pdf',
+      } as SearchCriteria;
+      const result = getNextSearchData(createMessage('2024-01-01T00:00:00.000Z'), MAX_OFFSET, 10000, false, criteria);
+      expect(result.offset).toBe(START_OFFSET);
+      expect(result.searchCriteria.attachmentExtensions).toEqual(['png', 'pdf']);
+      expect(result.searchCriteria.attachmentFilename).toBe('Report.pdf');
+      expect(result.searchCriteria.searchBeforeDate).toBeInstanceOf(Date);
+    });
+
     it('should reset offset when reaching MAX_OFFSET', () => {
       const message = createMessage('2024-01-15T12:00:00Z');
       const result = getNextSearchData(message, MAX_OFFSET, 10000, false, baseCriteria);

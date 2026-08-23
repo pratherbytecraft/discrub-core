@@ -526,6 +526,8 @@ export const isCriteriaActive = (searchCritera: SearchCriteria) => {
     isPinned,
     mentionIds,
     channelIds,
+    attachmentExtensions,
+    attachmentFilename,
   } = searchCritera;
   return [
     searchBeforeDate,
@@ -536,6 +538,8 @@ export const isCriteriaActive = (searchCritera: SearchCriteria) => {
     isPinned !== IsPinnedType.UNSET,
     mentionIds.length,
     channelIds.length,
+    attachmentExtensions?.length,
+    attachmentFilename,
   ].some((c) => c);
 };
 

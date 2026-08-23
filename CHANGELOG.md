@@ -5,6 +5,19 @@ All notable changes to `discrub-core` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.8] - 2026-08-22
+
+### Added
+
+- **`DiscrubSetting.APP_THEME_ANIMATIONS` setting key.** New
+  `DiscrubSetting` + `AppSettingsMap` entry backing the consumer app's
+  "Theme animations" toggle (supporter theme accents, Discrub 2.1.0).
+  Additive; existing settings are unchanged.
+- **`fetchRevokedSupporterKeys()`.** Reads `revoked_keys.json` from the
+  donation gist and resolves to the list of revoked supporter key ids. The
+  file is a rare-remedy tool and normally absent, so a missing file resolves
+  to an empty list rather than throwing.
+
 ## [1.0.7] - 2026-08-16
 
 ### Fixed

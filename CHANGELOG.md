@@ -5,6 +5,28 @@ All notable changes to `discrub-core` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.9] - 2026-08-22
+
+### Changed
+
+- **`SearchCriteria.searchMessageContent` is now `searchMessageContents: string[]`,
+  matched any-of (#244).** Discord's search takes one `content` term per
+  request (a second `content` param is ignored), so `fetchSearchMessageData`
+  issues one request per term at the same offset and merges the page
+  (deduped by message id, `total_results` summed), and `iterateSearchResults`
+  fetches the first page of every term up front as one merged page before
+  draining each term's remaining cap-shifted pages. One or zero terms behave
+  exactly as before. Consumers must rename the field; the helpers
+  `isCriteriaActive` and `countActiveFilters` count each term.
+
+### Added
+
+- **`fetchAnnouncementArchive()`** reads the past-announcements archive gist
+  (`index.json` plus one `<version>.md` per release) in a single request and
+  resolves to `AnnouncementArchiveEntry[]`, newest first; any failure resolves
+  to an empty list.
+- **`AnnouncementArchiveEntry` type.**
+
 ## [1.0.8] - 2026-08-22
 
 ### Added

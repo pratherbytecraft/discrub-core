@@ -8,6 +8,8 @@ import {
   filterMessageType,
   filterThread,
   countActiveFilters,
+  normalizeAttachmentExtension,
+  messageMatchesAttachmentCriteria,
   countTotalFilters,
   hasActiveSearchFilters,
 } from './helpers.ts';
@@ -571,4 +573,42 @@ describe('filtering/helpers', () => {
       expect(countTotalFilters(search, refine)).toBe(4); // 2 + 2
     });
   });
+
+describe('attachment criteria helpers (GH #13)', () => {
+  it('normalizes extensions to lowercase without a leading dot', () => {
+    expect(normalizeAttachmentExtension(' .PNG ')).toBe('png');
+    expect(normalizeAttachmentExtension('...tar.gz')).toBe('tar.gz');
+    expect(normalizeAttachmentExtension('   ')).toBe('');
+  });
+
+  it('matches extensions against the end of any attachment filename', () => {
+    const atts = [{ filename: 'Photo.PNG' }, { filename: 'notes.txt' }];
+    expect(messageMatchesAttachmentCriteria(atts, ['png'], null)).toBe(true);
+    expect(messageMatchesAttachmentCriteria(atts, ['.PDF', 'txt'], null)).toBe(true);
+    expect(messageMatchesAttachmentCriteria(atts, ['pdf'], null)).toBe(false);
+    expect(messageMatchesAttachmentCriteria([], ['png'], null)).toBe(false);
+    expect(messageMatchesAttachmentCriteria(undefined, ['png'], null)).toBe(false);
+  });
+
+  it('matches the filename term as a case-insensitive substring', () => {
+    const atts = [{ filename: 'Report_Q3_final.pdf' }];
+    expect(messageMatchesAttachmentCriteria(atts, [], 'q3')).toBe(true);
+    expect(messageMatchesAttachmentCriteria(atts, [], 'Q4')).toBe(false);
+    expect(messageMatchesAttachmentCriteria(atts, ['pdf'], 'final')).toBe(true);
+    expect(messageMatchesAttachmentCriteria(atts, ['png'], 'final')).toBe(false);
+  });
+
+  it('passes everything when no attachment criteria are set', () => {
+    expect(messageMatchesAttachmentCriteria(undefined, [], '')).toBe(true);
+    expect(messageMatchesAttachmentCriteria([], undefined, null)).toBe(true);
+  });
+
+  it('counts extensions individually and the filename once', () => {
+    const base = {
+      searchBeforeDate: null, searchAfterDate: null, searchMessageContent: null,
+      selectedHasTypes: [], userIds: [], mentionIds: [], channelIds: [], isPinned: IsPinnedType.UNSET,
+    } as unknown as Parameters<typeof countActiveFilters>[0];
+    expect(countActiveFilters({ ...base, attachmentExtensions: ['png', 'jpg'], attachmentFilename: 'x' })).toBe(3);
+  });
+});
 });

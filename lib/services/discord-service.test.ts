@@ -840,6 +840,33 @@ describe('DiscordService', () => {
       expect(params).toContain('content=test+query');
     });
 
+    it('should construct attachment_extension params, normalized and repeatable (GH #13)', () => {
+      const searchCriteria: SearchCriteria = {
+        ...baseSearchCriteria,
+        attachmentExtensions: ['png', ' .PDF ', '', '.'],
+      };
+
+      const params = service._getSearchParams(testGuildId, testChannelId, searchCriteria);
+
+      expect(params).toContain('attachment_extension=png');
+      expect(params).toContain('attachment_extension=pdf');
+      expect(params.match(/attachment_extension=/g)).toHaveLength(2);
+    });
+
+    it('should construct an exact attachment_filename param and skip blanks', () => {
+      const withName = service._getSearchParams(testGuildId, testChannelId, {
+        ...baseSearchCriteria,
+        attachmentFilename: ' Report Q3.PDF ',
+      });
+      expect(withName).toContain('attachment_filename=Report+Q3.PDF');
+
+      const blank = service._getSearchParams(testGuildId, testChannelId, {
+        ...baseSearchCriteria,
+        attachmentFilename: '   ',
+      });
+      expect(blank).not.toContain('attachment_filename');
+    });
+
     it('should construct search params with mentions', () => {
       const searchCriteria: SearchCriteria = {
         ...baseSearchCriteria,

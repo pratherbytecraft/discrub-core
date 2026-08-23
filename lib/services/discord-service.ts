@@ -25,6 +25,7 @@ import { QueryStringParam, ReactionType } from "../enum/discord-enum.ts";
 import { DiscrubSetting } from "../enum/discrub-enum.ts";
 import { wait } from "../utils/common-utils.ts";
 import { SettingsHelper } from "../utils/settings-utils.ts";
+import { normalizeAttachmentExtension } from "../filtering/helpers.ts";
 
 interface DiscordServiceOptions {
   /**
@@ -379,6 +380,8 @@ class DiscordService {
       mentionIds,
       channelIds,
       authorType,
+      attachmentExtensions,
+      attachmentFilename,
     } = searchCriteria;
 
     const isDmSearch = !guildId && channelId;
@@ -414,6 +417,15 @@ class DiscordService {
     });
     if (authorType) {
       urlSearchParams.set("author_type", authorType);
+    }
+    (attachmentExtensions ?? [])
+      .map(normalizeAttachmentExtension)
+      .filter((ext) => ext.length > 0)
+      .forEach((ext) => {
+        urlSearchParams.append("attachment_extension", ext);
+      });
+    if (attachmentFilename && attachmentFilename.trim().length > 0) {
+      urlSearchParams.set("attachment_filename", attachmentFilename.trim());
     }
     const nullKeys: string[] = [];
     urlSearchParams.forEach((value, key) => {

@@ -155,6 +155,36 @@ export const filterThread = (
   return applyInverseLogic(matches, inverseActive);
 };
 
+/**
+ * Normalize a user-typed attachment extension to what Discord's
+ * `attachment_extension` search param expects: trimmed, lowercase, no
+ * leading dot. "  .PNG " → "png". Empty input stays empty (callers drop it).
+ */
+export const normalizeAttachmentExtension = (raw: string): string =>
+  raw.trim().replace(/^\.+/, "").toLowerCase();
+
+/**
+ * Local counterpart of the `attachment_extension` / `attachment_filename`
+ * search params, for the Refine layer and package mode where no server
+ * search runs. Extensions match the end of any attachment filename
+ * (case-insensitive); the filename term is a case-insensitive substring
+ * match (looser than the server's exact match on purpose: it is the
+ * "I roughly remember the name" complement).
+ */
+export const messageMatchesAttachmentCriteria = (
+  attachments: ReadonlyArray<{ filename?: string }> | undefined,
+  extensions: string[] | undefined,
+  filename: string | null | undefined,
+): boolean => {
+  const exts = (extensions ?? []).map(normalizeAttachmentExtension).filter(Boolean);
+  const term = filename?.trim().toLowerCase() ?? "";
+  if (exts.length === 0 && term.length === 0) return true;
+  const names = (attachments ?? []).map((a) => (a.filename ?? "").toLowerCase());
+  if (exts.length > 0 && !names.some((n) => exts.some((e) => n.endsWith(`.${e}`)))) return false;
+  if (term.length > 0 && !names.some((n) => n.includes(term))) return false;
+  return true;
+};
+
 // ─── SearchCriteria active-filter counting (#195 cluster A) ────────────────
 // Moved from the discrub consumer's src/utils/searchCriteria.ts. These are
 // pure transforms over the SearchCriteria type with no consumer-state
@@ -172,6 +202,10 @@ export const filterThread = (
  */
 export const countActiveFilters = (criteria: SearchCriteria): number => {
   let count = 0;
+  if (criteria.attachmentExtensions && criteria.attachmentExtensions.length > 0) {
+    count += criteria.attachmentExtensions.length;
+  }
+  if (criteria.attachmentFilename) count++;
   if (criteria.searchMessageContent) count++;
   if (criteria.userIds && criteria.userIds.length > 0) count += criteria.userIds.length;
   if (criteria.selectedHasTypes && criteria.selectedHasTypes.length > 0) {

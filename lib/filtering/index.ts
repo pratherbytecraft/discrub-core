@@ -37,6 +37,8 @@ export {
   // #195 cluster A: SearchCriteria active-filter counters promoted from
   // the discrub consumer.
   countActiveFilters,
+  normalizeAttachmentExtension,
+  messageMatchesAttachmentCriteria,
   countTotalFilters,
   hasActiveSearchFilters,
 } from "./helpers.ts";

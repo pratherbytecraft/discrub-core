@@ -123,6 +123,8 @@ export function isCriteriaActive(criteria: SearchCriteria): boolean {
     (criteria.mentionIds && criteria.mentionIds.length > 0) ||
     (criteria.channelIds && criteria.channelIds.length > 0) ||
     (criteria.selectedHasTypes && criteria.selectedHasTypes.length > 0) ||
+    (criteria.attachmentExtensions && criteria.attachmentExtensions.length > 0) ||
+    criteria.attachmentFilename ||
     criteria.searchBeforeDate ||
     criteria.searchAfterDate ||
     (criteria.isPinned && criteria.isPinned !== IsPinnedType.UNSET)

@@ -206,7 +206,7 @@ export const countActiveFilters = (criteria: SearchCriteria): number => {
     count += criteria.attachmentExtensions.length;
   }
   if (criteria.attachmentFilename) count++;
-  if (criteria.searchMessageContent) count++;
+  if (criteria.searchMessageContents && criteria.searchMessageContents.length > 0) count += criteria.searchMessageContents.length;
   if (criteria.userIds && criteria.userIds.length > 0) count += criteria.userIds.length;
   if (criteria.selectedHasTypes && criteria.selectedHasTypes.length > 0) {
     count += criteria.selectedHasTypes.length;

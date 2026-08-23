@@ -520,7 +520,7 @@ export const isCriteriaActive = (searchCritera: SearchCriteria) => {
   const {
     searchBeforeDate,
     searchAfterDate,
-    searchMessageContent,
+    searchMessageContents,
     selectedHasTypes,
     userIds,
     isPinned,
@@ -532,7 +532,7 @@ export const isCriteriaActive = (searchCritera: SearchCriteria) => {
   return [
     searchBeforeDate,
     searchAfterDate,
-    searchMessageContent,
+    searchMessageContents?.length,
     selectedHasTypes.length,
     userIds.length,
     isPinned !== IsPinnedType.UNSET,

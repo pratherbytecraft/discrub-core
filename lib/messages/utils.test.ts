@@ -45,7 +45,7 @@ describe('messages/utils', () => {
     } as Message);
 
     const baseCriteria: SearchCriteria = {
-      searchMessageContent: 'test',
+      searchMessageContents: ['test'],
     };
 
     it('should increment offset by OFFSET_INCREMENT', () => {
@@ -107,7 +107,7 @@ describe('messages/utils', () => {
 
     it('should preserve search criteria when not at MAX_OFFSET', () => {
       const message = createMessage('2024-01-15T12:00:00Z');
-      const criteria = { ...baseCriteria, searchMessageContent: 'specific' };
+      const criteria = { ...baseCriteria, searchMessageContents: ['specific'] };
       const result = getNextSearchData(message, 0, 100, false, criteria);
 
       expect(result.searchCriteria).toEqual(criteria);
@@ -244,8 +244,8 @@ describe('messages/utils', () => {
   });
 
   describe('isCriteriaActive', () => {
-    it('should return true when searchMessageContent is set', () => {
-      const criteria: SearchCriteria = { searchMessageContent: 'test' };
+    it('should return true when searchMessageContents has a term', () => {
+      const criteria: SearchCriteria = { searchMessageContents: ['test'] };
       expect(isCriteriaActive(criteria)).toBe(true);
     });
 

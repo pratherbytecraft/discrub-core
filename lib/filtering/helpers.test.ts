@@ -510,8 +510,8 @@ describe('filtering/helpers', () => {
       expect(hasActiveSearchFilters(undefined)).toBe(false);
     });
 
-    it('counts searchMessageContent as 1 when set', () => {
-      expect(countActiveFilters({ searchMessageContent: 'hello' } as SearchCriteria)).toBe(1);
+    it('counts each content term', () => {
+      expect(countActiveFilters({ searchMessageContents: ['hello'] } as SearchCriteria)).toBe(1);
     });
 
     it('counts each userId as 1 (multi-user filter)', () => {
@@ -554,7 +554,7 @@ describe('filtering/helpers', () => {
 
     it('aggregates a mixed criteria correctly', () => {
       const c: SearchCriteria = {
-        searchMessageContent: 'hi',
+        searchMessageContents: ['hi'],
         userIds: ['u1'],
         selectedHasTypes: ['image'],
         searchAfterDate: 'd',
@@ -568,7 +568,7 @@ describe('filtering/helpers', () => {
     });
 
     it('countTotalFilters sums search + refine', () => {
-      const search = { searchMessageContent: 'a', userIds: ['u1'] } as any;
+      const search = { searchMessageContents: ['a'], userIds: ['u1'] } as any;
       const refine = { selectedHasTypes: ['image', 'video'] } as any;
       expect(countTotalFilters(search, refine)).toBe(4); // 2 + 2
     });
@@ -605,7 +605,7 @@ describe('attachment criteria helpers (GH #13)', () => {
 
   it('counts extensions individually and the filename once', () => {
     const base = {
-      searchBeforeDate: null, searchAfterDate: null, searchMessageContent: null,
+      searchBeforeDate: null, searchAfterDate: null, searchMessageContents: [],
       selectedHasTypes: [], userIds: [], mentionIds: [], channelIds: [], isPinned: IsPinnedType.UNSET,
     } as unknown as Parameters<typeof countActiveFilters>[0];
     expect(countActiveFilters({ ...base, attachmentExtensions: ['png', 'jpg'], attachmentFilename: 'x' })).toBe(3);

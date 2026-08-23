@@ -374,7 +374,7 @@ class DiscordService {
       userIds,
       searchAfterDate,
       searchBeforeDate,
-      searchMessageContent,
+      searchMessageContents,
       selectedHasTypes,
       isPinned,
       mentionIds,
@@ -393,7 +393,8 @@ class DiscordService {
       max_id: searchBeforeDate
         ? this.generateSnowflake(searchBeforeDate)
         : "null",
-      content: searchMessageContent || "null",
+      // One term per request; multi-term OR is iterated by the caller.
+      content: searchMessageContents?.[0] || "null",
       channel_id: isDmSearch ? "null" : channelId || "null",
       include_nsfw: "true",
       pinned: isPinned,
@@ -461,18 +462,75 @@ class DiscordService {
     }`;
   };
 
-  fetchSearchMessageData = (
+  fetchSearchMessageData = async (
     authorization: string,
     offset: number,
     channelId: string | null,
     guildId: string | null,
     searchCriteria: SearchCriteria,
-  ) =>
-    this.get<SearchMessageResult>(
-      this._getSearchPath(guildId, channelId, offset, searchCriteria),
-      authorization,
-      "search",
+  ): Promise<DiscordApiResponse<SearchMessageResult>> => {
+    const terms = (searchCriteria.searchMessageContents ?? []).filter(
+      (t) => t.trim().length > 0,
     );
+    if (terms.length <= 1) {
+      return this.get<SearchMessageResult>(
+        this._getSearchPath(guildId, channelId, offset, {
+          ...searchCriteria,
+          searchMessageContents: terms,
+        }),
+        authorization,
+        "search",
+      );
+    }
+    // Multi-term OR (#244) for single-page callers (initial search, offset
+    // paging, thread search, package preflight): one request per term at
+    // the same offset, merged into one page and deduped by message id.
+    // `total_results` is the sum of the per-term totals (an upper bound;
+    // the cap-shift iterator refines it as duplicates surface). A 202
+    // (not yet indexed) or a failure on any term is returned as-is so the
+    // caller's retry/error handling runs unchanged.
+    const seen = new Set<string>();
+    const merged: Message[] = [];
+    let total = 0;
+    let stillIndexing = false;
+    let last: DiscordApiResponse<SearchMessageResult> | null = null;
+    for (const term of terms) {
+      const response = await this.get<SearchMessageResult>(
+        this._getSearchPath(guildId, channelId, offset, {
+          ...searchCriteria,
+          searchMessageContents: [term],
+        }),
+        authorization,
+        "search",
+      );
+      if (!response.success || !response.data || response.status === 202) {
+        return response;
+      }
+      last = response;
+      const data = response.data;
+      total += data.total_results ?? 0;
+      stillIndexing = stillIndexing || data.doing_deep_historical_index === true;
+      const raw = data.messages || [];
+      const flat: Message[] = Array.isArray(raw[0])
+        ? (raw as unknown as Message[][]).flat()
+        : (raw as unknown as Message[]);
+      for (const m of flat) {
+        if (!seen.has(m.id)) {
+          seen.add(m.id);
+          merged.push(m);
+        }
+      }
+    }
+    return {
+      ...(last as DiscordApiResponse<SearchMessageResult>),
+      data: {
+        ...(last as DiscordApiResponse<SearchMessageResult>).data,
+        messages: merged,
+        total_results: total,
+        doing_deep_historical_index: stillIndexing,
+      } as SearchMessageResult,
+    };
+  };
 
   /**
    * Iterate all messages matching `criteria`, yielding one page at a time.
@@ -511,6 +569,109 @@ class DiscordService {
    * future regression to context-bearing responses.
    */
   iterateSearchResults = async function* (
+    this: DiscordService,
+    options: SearchIterationOptions,
+  ): AsyncGenerator<SearchIterationPage, void, void> {
+    const terms = (options.criteria.searchMessageContents ?? []).filter(
+      (t) => t.trim().length > 0,
+    );
+    if (terms.length <= 1) {
+      yield* this._iterateSingleTermSearch({
+        ...options,
+        criteria: { ...options.criteria, searchMessageContents: terms },
+      });
+      return;
+    }
+
+    // Multi-term OR (#244): Discord's `content` param takes a single
+    // term, so each term gets its own full cap-shifted search. Callers
+    // that show a first page and stop until "Load All" (the message feed)
+    // must see every term on that first page, so the first page of EVERY
+    // term is fetched up front and yielded as one merged page; the
+    // remaining pages of each term then follow in order. Results are
+    // deduped across terms by message id; `pageIndex` stays monotonic;
+    // `aggregatedCount` counts unique messages; `totalResults` is the sum
+    // of each term's reported total minus the duplicates seen so far, an
+    // upper bound that converges on the true unique total by the end. The
+    // inter-page hook runs between every request, including term switches,
+    // so the caller's pacing applies throughout.
+    const seenIds = new Set<string>();
+    let pageIndex = 0;
+    let aggregatedCount = 0;
+    let duplicates = 0;
+    const termTotals: number[] = terms.map(() => 0);
+    const totalSoFar = () =>
+      Math.max(aggregatedCount, termTotals.reduce((sum, t) => sum + t, 0) - duplicates);
+    const dedupe = (messages: Message[]): Message[] => {
+      const fresh: Message[] = [];
+      for (const m of messages) {
+        if (seenIds.has(m.id)) {
+          duplicates++;
+        } else {
+          seenIds.add(m.id);
+          fresh.push(m);
+        }
+      }
+      return fresh;
+    };
+    const paceOrStop = async (): Promise<boolean> => {
+      if (options.shouldStop && (await options.shouldStop())) return true;
+      if (options.onBetweenPages && (await options.onBetweenPages()) === true) return true;
+      return false;
+    };
+
+    const inners = terms.map((term) =>
+      this._iterateSingleTermSearch({
+        ...options,
+        criteria: { ...options.criteria, searchMessageContents: [term] },
+      }),
+    );
+
+    // Phase 1: first page of every term, merged into a single yield.
+    const merged: Message[] = [];
+    let stillIndexing = false;
+    for (let i = 0; i < inners.length; i++) {
+      if (i > 0 && (await paceOrStop())) return;
+      const first = await inners[i].next();
+      if (first.done) continue;
+      termTotals[i] = first.value.totalResults;
+      stillIndexing = stillIndexing || first.value.stillIndexing === true;
+      merged.push(...dedupe(first.value.messages));
+    }
+    aggregatedCount += merged.length;
+    yield {
+      messages: merged,
+      totalResults: totalSoFar(),
+      pageIndex,
+      aggregatedCount,
+      stillIndexing,
+    };
+    pageIndex++;
+
+    // Phase 2: drain the rest of each term in order.
+    for (let i = 0; i < inners.length; i++) {
+      if (await paceOrStop()) return;
+      for await (const page of inners[i]) {
+        termTotals[i] = page.totalResults;
+        const fresh = dedupe(page.messages);
+        aggregatedCount += fresh.length;
+        yield {
+          ...page,
+          messages: fresh,
+          totalResults: totalSoFar(),
+          pageIndex,
+          aggregatedCount,
+        };
+        pageIndex++;
+      }
+    }
+  };
+
+  /**
+   * Single-term search iteration (the always-cap-shift engine). Public
+   * callers use `iterateSearchResults`, which adds multi-term OR on top.
+   */
+  _iterateSingleTermSearch = async function* (
     this: DiscordService,
     options: SearchIterationOptions,
   ): AsyncGenerator<SearchIterationPage, void, void> {

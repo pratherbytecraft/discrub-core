@@ -1088,7 +1088,7 @@ describe('discrub-utils', () => {
         const criteria = {
           searchBeforeDate: undefined,
           searchAfterDate: undefined,
-          searchMessageContent: undefined,
+          searchMessageContents: [],
           selectedHasTypes: [],
           userIds: [],
           isPinned: 0,
@@ -1106,9 +1106,9 @@ describe('discrub-utils', () => {
         expect(isCriteriaActive(criteria)).toBe(true);
       });
 
-      it('should return true when searchMessageContent is set', () => {
+      it('should return true when searchMessageContents has a term', () => {
         const criteria = {
-          searchMessageContent: 'hello',
+          searchMessageContents: ['hello'],
           selectedHasTypes: [],
           userIds: [],
           isPinned: 0,

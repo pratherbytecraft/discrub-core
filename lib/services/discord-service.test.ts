@@ -794,7 +794,7 @@ describe('DiscordService', () => {
       userIds: [],
       searchAfterDate: null,
       searchBeforeDate: null,
-      searchMessageContent: '',
+      searchMessageContents: [],
       selectedHasTypes: [],
       isPinned: 'false',
       mentionIds: [],
@@ -832,7 +832,7 @@ describe('DiscordService', () => {
     it('should construct search params with message content', () => {
       const searchCriteria: SearchCriteria = {
         ...baseSearchCriteria,
-        searchMessageContent: 'test query',
+        searchMessageContents: ['test query'],
       };
 
       const params = service._getSearchParams(testGuildId, testChannelId, searchCriteria);
@@ -919,7 +919,7 @@ describe('DiscordService', () => {
         ...baseSearchCriteria,
         searchAfterDate: null,
         searchBeforeDate: null,
-        searchMessageContent: '',
+        searchMessageContents: [],
       };
 
       const params = service._getSearchParams(testGuildId, testChannelId, searchCriteria);
@@ -1013,13 +1013,57 @@ describe('DiscordService', () => {
     });
   });
 
+  describe('fetchSearchMessageData multi-term OR (#244)', () => {
+    const criteria = {
+      userIds: [], mentionIds: [], selectedHasTypes: [], channelIds: [],
+      searchMessageContents: ['alpha', 'beta'], searchAfterDate: null, searchBeforeDate: null, isPinned: 'null' as any,
+    } as SearchCriteria;
+    const page = (ids: string[], total: number) => ({
+      ok: true, status: 200,
+      json: async () => ({ messages: ids.map((id) => [{ ...mockMessage, id }]), total_results: total }),
+    });
+
+    it('requests each term at the same offset and returns one merged, deduped page with summed totals', async () => {
+      const urls: string[] = [];
+      vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+        urls.push(url);
+        const term = new URL(url).searchParams.get('content');
+        return term === 'alpha' ? page(['1', '2'], 2) : page(['2', '3'], 2);
+      }));
+      const res = await service.fetchSearchMessageData(testAuth, 25, testChannelId, testGuildId, criteria);
+      expect(res.success).toBe(true);
+      expect((res.data as any).messages.map((m: any) => m.id)).toEqual(['1', '2', '3']);
+      expect((res.data as any).total_results).toBe(4);
+      expect(urls.map((u) => new URL(u).searchParams.getAll('content'))).toEqual([['alpha'], ['beta']]);
+      expect(urls.every((u) => u.includes('offset=25'))).toBe(true);
+    });
+
+    it('returns a failed or 202 response from any term unchanged so callers retry as before', async () => {
+      vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+        const term = new URL(url).searchParams.get('content');
+        return term === 'alpha' ? page(['1'], 1) : { ok: false, status: 500, json: async () => ({}) };
+      }));
+      const res = await service.fetchSearchMessageData(testAuth, 0, testChannelId, testGuildId, criteria);
+      expect(res.success).toBe(false);
+      expect(res.status).toBe(500);
+    });
+
+    it('is the plain single request for one term', async () => {
+      const urls: string[] = [];
+      vi.stubGlobal('fetch', vi.fn(async (url: string) => { urls.push(url); return page(['1'], 1); }));
+      await service.fetchSearchMessageData(testAuth, 0, testChannelId, testGuildId, { ...criteria, searchMessageContents: ['solo'] });
+      expect(urls).toHaveLength(1);
+      expect(new URL(urls[0]).searchParams.getAll('content')).toEqual(['solo']);
+    });
+  });
+
   describe('iterateSearchResults', () => {
     const baseSearchCriteria: SearchCriteria = {
       userIds: [],
       mentionIds: [],
       selectedHasTypes: [],
       channelIds: [],
-      searchMessageContent: null,
+      searchMessageContents: [],
       searchAfterDate: null,
       searchBeforeDate: null,
       isPinned: 'null' as any,
@@ -1029,6 +1073,97 @@ describe('DiscordService', () => {
       ...mockMessage,
       id,
       timestamp,
+    });
+
+    describe('multi-term OR (#244)', () => {
+      /** Mock: one data page per term keyed by the `content=` param, then empties. */
+      const stubPerTerm = (pagesByTerm: Record<string, { messages: any[]; total: number }>) => {
+        const calls: string[] = [];
+        const served = new Set<string>();
+        vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+          calls.push(url);
+          const term = decodeURIComponent(new URL(url).searchParams.get('content') ?? '');
+          const entry = pagesByTerm[term];
+          const first = !served.has(term);
+          served.add(term);
+          return {
+            ok: true,
+            status: 200,
+            json: async () =>
+              first && entry
+                ? { messages: entry.messages.map((m) => [m]), total_results: entry.total }
+                : { messages: [], total_results: entry?.total ?? 0 },
+          };
+        }));
+        return calls;
+      };
+
+      const collect = async (criteria: SearchCriteria, hooks: Partial<Parameters<typeof service.iterateSearchResults>[0]> = {}) => {
+        const pages: any[] = [];
+        for await (const page of service.iterateSearchResults({
+          token: testAuth,
+          channelId: testChannelId,
+          guildId: testGuildId,
+          criteria,
+          ...hooks,
+        })) pages.push(page);
+        return pages;
+      };
+
+      it('fetches the first page of EVERY term up front and yields them as one merged page', async () => {
+        const calls = stubPerTerm({
+          alpha: { messages: [makeMessage('1'), makeMessage('2')], total: 2 },
+          beta: { messages: [makeMessage('3')], total: 1 },
+        });
+        const pages = await collect({ ...baseSearchCriteria, searchMessageContents: ['alpha', 'beta'] });
+        // Callers that stop after the first page (the feed until Load All,
+        // export/purge on an empty page) still see every term.
+        expect(pages[0].messages.map((m: any) => m.id)).toEqual(['1', '2', '3']);
+        expect(pages[0].totalResults).toBe(3);
+        expect(pages[0].aggregatedCount).toBe(3);
+        const contents = calls.map((u) => new URL(u).searchParams.getAll('content'));
+        expect(contents.every((c) => c.length === 1)).toBe(true);
+        expect(contents.slice(0, 2)).toEqual([['alpha'], ['beta']]);
+        const ids = pages.flatMap((p) => p.messages.map((m: any) => m.id));
+        expect(ids).toEqual(['1', '2', '3']);
+        expect(pages.map((p) => p.pageIndex)).toEqual(pages.map((_, i) => i));
+      });
+
+      it('dedupes messages that match more than one term and keeps totalResults an upper bound that converges', async () => {
+        stubPerTerm({
+          alpha: { messages: [makeMessage('1'), makeMessage('2')], total: 2 },
+          beta: { messages: [makeMessage('2'), makeMessage('3')], total: 2 },
+        });
+        const pages = await collect({ ...baseSearchCriteria, searchMessageContents: ['alpha', 'beta'] });
+        expect(pages[0].messages.map((m: any) => m.id)).toEqual(['1', '2', '3']);
+        // 2 + 2 reported, 1 duplicate seen → 3, and it stays 3 to the end.
+        expect(pages[0].totalResults).toBe(3);
+        const last = pages[pages.length - 1];
+        expect(last.aggregatedCount).toBe(3);
+        expect(last.totalResults).toBe(3);
+      });
+
+      it('runs the between-pages hook between the per-term fetches and honours a stop there', async () => {
+        const calls = stubPerTerm({
+          alpha: { messages: [makeMessage('1')], total: 1 },
+          beta: { messages: [makeMessage('2')], total: 1 },
+        });
+        const pages = await collect(
+          { ...baseSearchCriteria, searchMessageContents: ['alpha', 'beta'] },
+          { onBetweenPages: () => true },
+        );
+        // Stopped at the first term switch: one request (alpha), nothing yielded.
+        expect(calls).toHaveLength(1);
+        expect(new URL(calls[0]).searchParams.get('content')).toBe('alpha');
+        expect(pages).toEqual([]);
+      });
+
+      it('treats a single term (or blank terms) as the plain single-term search', async () => {
+        const calls = stubPerTerm({ solo: { messages: [makeMessage('9')], total: 1 } });
+        const pages = await collect({ ...baseSearchCriteria, searchMessageContents: ['solo', '  '] });
+        expect(pages.flatMap((p) => p.messages.map((m: any) => m.id))).toEqual(['9']);
+        expect(new URL(calls[0]).searchParams.get('content')).toBe('solo');
+      });
     });
 
     it('yields a partial first page and terminates after two consecutive empties', async () => {

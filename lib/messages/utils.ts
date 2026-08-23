@@ -118,7 +118,7 @@ export function isDm(channel: Channel): boolean {
  */
 export function isCriteriaActive(criteria: SearchCriteria): boolean {
   return !!(
-    criteria.searchMessageContent ||
+    (criteria.searchMessageContents && criteria.searchMessageContents.length > 0) ||
     (criteria.userIds && criteria.userIds.length > 0) ||
     (criteria.mentionIds && criteria.mentionIds.length > 0) ||
     (criteria.channelIds && criteria.channelIds.length > 0) ||

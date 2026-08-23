@@ -3,7 +3,15 @@ import { AuthorType, HasType, IsPinnedType } from "../../enum/discord-enum";
 export type SearchCriteria = {
   searchBeforeDate: Date | null | undefined;
   searchAfterDate: Date | null | undefined;
-  searchMessageContent: string | null | undefined;
+  /**
+   * Content terms, matched as ANY-OF (OR). Empty = no content filter.
+   * Server search: Discord's `content` param takes ONE term (a second
+   * `content` param is ignored, verified live 2026-08-26), so
+   * `iterateSearchResults` runs one cap-shifted search per term and
+   * dedupes by message id. Local refine: case-insensitive substring,
+   * any term. (#244)
+   */
+  searchMessageContents: string[];
   selectedHasTypes: HasType[];
   userIds: string[];
   mentionIds: string[];

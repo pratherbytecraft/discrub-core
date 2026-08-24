@@ -1,4 +1,4 @@
-import { DiscrubSetting } from "../../enum/discrub-enum";
+import { DiscrubSetting, DmSortOrder } from "../../enum/discrub-enum";
 import { SortDirection } from "../../enum/common-enum";
 
 type AppSettingsMap = {
@@ -26,6 +26,7 @@ type AppSettingsMap = {
   [DiscrubSetting.APP_USER_DATA_REFRESH_RATE]: string;
   [DiscrubSetting.APP_THEME_MODE]: string;
   [DiscrubSetting.APP_THEME_ANIMATIONS]: string;
+  [DiscrubSetting.APP_DM_SORT_ORDER]: DmSortOrder;
   [DiscrubSetting.EXPORT_MEDIA_IMAGES]: string;
   [DiscrubSetting.EXPORT_MEDIA_VIDEOS]: string;
   [DiscrubSetting.EXPORT_MEDIA_AUDIO]: string;

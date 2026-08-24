@@ -1,6 +1,7 @@
 export { BrowserEnvironment } from "./discrub/browser-environment.ts";
 export { DateFormat } from "./discrub/date-format.ts";
 export { DiscrubSetting } from "./discrub/discrub-setting.ts";
+export { DmSortOrder } from "./discrub/dm-sort-order.ts";
 export { EntityHint } from "./discrub/entity-hint.ts";
 export { ExportType } from "./discrub/export-type.ts";
 export { FilterName } from "./discrub/filter-name.ts";

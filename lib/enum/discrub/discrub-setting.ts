@@ -28,6 +28,7 @@ export enum DiscrubSetting {
   APP_USER_DATA_REFRESH_RATE = "appUserDataRefreshRate",
   APP_THEME_MODE = "appThemeMode",
   APP_THEME_ANIMATIONS = "appThemeAnimations",
+  APP_DM_SORT_ORDER = "appDmSortOrder",
 
   EXPORT_MEDIA_IMAGES = "exportMediaImages",
   EXPORT_MEDIA_VIDEOS = "exportMediaVideos",

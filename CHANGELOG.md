@@ -5,6 +5,16 @@ All notable changes to `discrub-core` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`DiscrubSetting.APP_DM_SORT_ORDER` + `DmSortOrder` enum (#248).** New
+  Display setting for the consumer's DM list ordering: `recent` (default,
+  most recent message first via snowflake-decoded `last_message_id`),
+  `name` (alphabetical by conversation label), or `discord` (the API's
+  own order). Storage values are stable strings.
+
 ## [1.0.9] - 2026-08-22
 
 ### Changed

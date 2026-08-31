@@ -5,7 +5,7 @@ All notable changes to `discrub-core` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.0.10] - 2026-08-30
 
 ### Added
 
@@ -14,6 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   most recent message first via snowflake-decoded `last_message_id`),
   `name` (alphabetical by conversation label), or `discord` (the API's
   own order). Storage values are stable strings.
+- **`setSleepImplementation(impl?)` + `SleepImplementation` type (#247).**
+  Every paced delay in the library flows through `wait()`, which now
+  delegates to a host-injectable sleep. A browser host can inject a
+  worker-timer sleep so operation pacing survives background-tab timer
+  throttling; calling it with no argument restores the built-in
+  `setTimeout` sleep. Injection is process-wide and takes effect for
+  in-flight loops on their next delay.
 
 ## [1.0.9] - 2026-08-22
 

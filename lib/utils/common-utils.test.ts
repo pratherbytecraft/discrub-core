@@ -1,7 +1,30 @@
 import { describe, it, expect, vi } from 'vitest';
-import { wait, MapUtils } from './common-utils.ts';
+import { wait, MapUtils, setSleepImplementation } from './common-utils.ts';
 
 describe('common-utils', () => {
+  describe('setSleepImplementation', () => {
+    it('routes wait through the override and converts seconds to ms', async () => {
+      const sleep = vi.fn(() => Promise.resolve());
+      setSleepImplementation(sleep);
+      try {
+        await wait(1.5);
+        expect(sleep).toHaveBeenCalledWith(1500);
+      } finally {
+        setSleepImplementation();
+      }
+    });
+
+    it('restores the setTimeout default when called with no argument', async () => {
+      const sleep = vi.fn(() => Promise.resolve());
+      setSleepImplementation(sleep);
+      setSleepImplementation();
+      const startTime = Date.now();
+      await wait(0.05);
+      expect(sleep).not.toHaveBeenCalled();
+      expect(Date.now() - startTime).toBeGreaterThanOrEqual(50);
+    });
+  });
+
   describe('wait', () => {
     it('should wait for specified seconds', async () => {
       const startTime = Date.now();

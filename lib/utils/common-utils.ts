@@ -1,10 +1,28 @@
+export type SleepImplementation = (ms: number) => Promise<void>;
+
+const defaultSleep: SleepImplementation = (ms) =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
+let sleepImpl: SleepImplementation = defaultSleep;
+
+/**
+ * Swap the timer behind every wait() in the library. Browser hosts pass a
+ * Web-Worker-driven sleep so pacing survives background-tab timer
+ * throttling (main-thread setTimeout chains are clamped to one tick per
+ * minute after ~5 minutes backgrounded); call with no argument to restore
+ * the setTimeout default.
+ */
+export const setSleepImplementation = (impl?: SleepImplementation) => {
+  sleepImpl = impl ?? defaultSleep;
+};
+
 /**
  *
  * @param seconds Number of seconds to wait for
  * @param callback Optional function to be used after the specified seconds have passed
  */
 export const wait = async (seconds: number, callback = () => {}) => {
-  await new Promise((resolve) => setTimeout(resolve, seconds * 1000));
+  await sleepImpl(seconds * 1000);
   return callback();
 };
 

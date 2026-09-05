@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { DiscordService } from './discord-service.ts';
+import { DiscordService, resetRateLimitState, getRateLimitCooldownMs, RATE_LIMIT_DEFAULTS } from './discord-service.ts';
+import { setSleepImplementation } from '../utils/common-utils.ts';
 import {
   mockUser,
   mockGuild,
@@ -10,6 +11,8 @@ import {
   mockSuccessResponse,
   mockErrorResponse,
   mockRateLimitResponse,
+  mockHtmlRateLimitResponse,
+  mockGlobalRateLimitResponse,
 } from '../__tests__/test-fixtures.ts';
 import {
   mockFetchSuccess,
@@ -313,6 +316,147 @@ describe('DiscordService', () => {
       await service.getUser(testAuth, testUserId);
 
       expect(waitSpy).toHaveBeenCalledWith(retryAfter);
+    });
+  });
+
+  describe('Rate limit storms (#254)', () => {
+    // Instant sleep that records every requested wait (ms) so the tests
+    // assert pacing without real time passing.
+    let sleeps: number[];
+    beforeEach(() => {
+      sleeps = [];
+      setSleepImplementation(async (ms) => { sleeps.push(ms); });
+      resetRateLimitState();
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+    });
+    afterEach(() => {
+      setSleepImplementation();
+      resetRateLimitState();
+    });
+
+    it('keeps status 429 and uses the Retry-After header when the body is not JSON', async () => {
+      const mockFetch = vi.fn()
+        .mockResolvedValueOnce(mockHtmlRateLimitResponse(3))
+        .mockResolvedValueOnce(mockSuccessResponse(mockUser));
+      vi.stubGlobal('fetch', mockFetch);
+      const onRateLimit = vi.fn();
+      service.onRateLimit = onRateLimit;
+
+      const result = await service.getUser(testAuth, testUserId);
+
+      expect(result.success).toBe(true);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(onRateLimit).toHaveBeenCalledWith(3, expect.objectContaining({ source: 'header', consecutive: 1, global: false, capped: false }));
+      expect(sleeps).toContain(3000);
+    });
+
+    it('falls back to the default wait when a non-JSON 429 has no Retry-After header', async () => {
+      const mockFetch = vi.fn()
+        .mockResolvedValueOnce(mockHtmlRateLimitResponse(null))
+        .mockResolvedValueOnce(mockSuccessResponse(mockUser));
+      vi.stubGlobal('fetch', mockFetch);
+      const onRateLimit = vi.fn();
+      service.onRateLimit = onRateLimit;
+
+      const result = await service.getUser(testAuth, testUserId);
+
+      expect(result.success).toBe(true);
+      expect(onRateLimit).toHaveBeenCalledWith(RATE_LIMIT_DEFAULTS.defaultWaitSecs, expect.objectContaining({ source: 'default' }));
+      expect(sleeps).toContain(RATE_LIMIT_DEFAULTS.defaultWaitSecs * 1000);
+    });
+
+    it('prefers the JSON retry_after over the header and reports the global flag', async () => {
+      const response = mockGlobalRateLimitResponse(2);
+      const mockFetch = vi.fn()
+        .mockResolvedValueOnce(response)
+        .mockResolvedValueOnce(mockSuccessResponse(mockUser));
+      vi.stubGlobal('fetch', mockFetch);
+      const onRateLimit = vi.fn();
+      service.onRateLimit = onRateLimit;
+
+      await service.getUser(testAuth, testUserId);
+
+      expect(onRateLimit).toHaveBeenCalledWith(2, expect.objectContaining({ source: 'json', global: true, scope: 'global' }));
+    });
+
+    it('gives up with status 429 + rateLimited when retry_after exceeds maxWaitSecs', async () => {
+      const mockFetch = vi.fn().mockResolvedValue(mockRateLimitResponse(600));
+      vi.stubGlobal('fetch', mockFetch);
+      const onRateLimit = vi.fn();
+      const onExceeded = vi.fn();
+      service.onRateLimit = onRateLimit;
+      service.onRateLimitExceeded = onExceeded;
+
+      const result = await service.getUser(testAuth, testUserId);
+
+      expect(result).toEqual({ success: false, status: 429, rateLimited: true, retryAfter: 600 });
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(onRateLimit).not.toHaveBeenCalled();
+      expect(onExceeded).toHaveBeenCalledWith(expect.objectContaining({ capped: true, retryAfter: RATE_LIMIT_DEFAULTS.maxWaitSecs, consecutive: 1 }));
+      // The shared cooldown is still armed (capped to maxWaitSecs) so the
+      // next request backs off instead of piling on.
+      expect(getRateLimitCooldownMs()).toBeGreaterThan(RATE_LIMIT_DEFAULTS.maxWaitSecs * 1000 - 1000);
+    });
+
+    it('gives up after maxConsecutive 429s on one request', async () => {
+      const mockFetch = vi.fn().mockResolvedValue(mockHtmlRateLimitResponse(1));
+      vi.stubGlobal('fetch', mockFetch);
+      const onRateLimit = vi.fn();
+      const onExceeded = vi.fn();
+      service.onRateLimit = onRateLimit;
+      service.onRateLimitExceeded = onExceeded;
+
+      const result = await service.getUser(testAuth, testUserId);
+
+      expect(result.success).toBe(false);
+      expect(result.status).toBe(429);
+      expect(result.rateLimited).toBe(true);
+      expect(mockFetch).toHaveBeenCalledTimes(RATE_LIMIT_DEFAULTS.maxConsecutive);
+      expect(onRateLimit).toHaveBeenCalledTimes(RATE_LIMIT_DEFAULTS.maxConsecutive - 1);
+      expect(onExceeded).toHaveBeenCalledWith(expect.objectContaining({ consecutive: RATE_LIMIT_DEFAULTS.maxConsecutive, capped: false }));
+    });
+
+    it('honors per-instance rateLimit options', async () => {
+      const tuned = new DiscordService(undefined, { rateLimit: { maxConsecutive: 2, defaultWaitSecs: 0.5 } });
+      const mockFetch = vi.fn().mockResolvedValue(mockHtmlRateLimitResponse(null));
+      vi.stubGlobal('fetch', mockFetch);
+      const onRateLimit = vi.fn();
+      tuned.onRateLimit = onRateLimit;
+
+      const result = await tuned.getUser(testAuth, testUserId);
+
+      expect(result.rateLimited).toBe(true);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(onRateLimit).toHaveBeenCalledWith(0.5, expect.anything());
+    });
+
+    it('makes an unrelated request wait out the shared cooldown, across instances', async () => {
+      const mockFetch = vi.fn()
+        .mockResolvedValueOnce(mockRateLimitResponse(4))
+        .mockResolvedValueOnce(mockSuccessResponse(mockUser))
+        .mockResolvedValueOnce(mockSuccessResponse(mockGuild));
+      vi.stubGlobal('fetch', mockFetch);
+
+      await service.getUser(testAuth, testUserId);
+      // The instant sleep did not advance the clock, so the cooldown set
+      // by the 429 is still active for the next request.
+      const cooldownBefore = getRateLimitCooldownMs();
+      expect(cooldownBefore).toBeGreaterThan(3000);
+      sleeps = [];
+
+      const other = new DiscordService();
+      const result = await other.getUser(testAuth, testUserId);
+
+      expect(result.success).toBe(true);
+      expect(sleeps.length).toBe(1);
+      expect(sleeps[0]).toBeGreaterThan(3000);
+      expect(sleeps[0]).toBeLessThanOrEqual(4000);
+    });
+
+    it('does not wait when no cooldown is active', async () => {
+      vi.stubGlobal('fetch', mockFetchSuccess(mockUser));
+      await service.getUser(testAuth, testUserId);
+      expect(sleeps).toEqual([]);
     });
   });
 

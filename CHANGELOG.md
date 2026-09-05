@@ -5,6 +5,36 @@ All notable changes to `discrub-core` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.11] - 2026-09-06
+
+### Changed
+
+- **`withRetry` no longer waits out a 429 storm (#254).** A 429 whose body
+  is not JSON (a Cloudflare block page) used to throw inside `json()` and
+  come back as a status-less failure, which hosts read as a network blip
+  and retried. The body is now parsed defensively: JSON `retry_after` and
+  `global` first, then the `Retry-After` header, then a default of 5 s,
+  and the response always keeps `status: 429`. When `retry_after` exceeds
+  `maxWaitSecs` (60) or one request draws `maxConsecutive` (5) 429s in a
+  row, the request is abandoned with `{ success: false, status: 429,
+  rateLimited: true, retryAfter }` instead of waiting forever.
+- **Shared cooldown across every instance and in-flight request.** Any
+  429 extends a module-level cooldown; every request waits it out before
+  firing, so parallel bursts and separately constructed adapters back off
+  together. `resetRateLimitState()` / `getRateLimitCooldownMs()` are
+  exported for hosts and tests.
+
+### Added
+
+- `onRateLimit(retryAfter, info)` now receives a `RateLimitInfo` second
+  argument (`global`, `scope`, `source`, `consecutive`, `capped`).
+  Existing one-argument listeners keep working.
+- `onRateLimitExceeded(info)` fires when a request is abandoned. Hosts
+  should stop the running operation.
+- `DiscordServiceOptions.rateLimit` (`maxWaitSecs`, `maxConsecutive`,
+  `defaultWaitSecs`) and the exported `RATE_LIMIT_DEFAULTS`.
+- `DiscordApiResponse.rateLimited` / `retryAfter` (optional, additive).
+
 ## [1.0.10] - 2026-08-30
 
 ### Added

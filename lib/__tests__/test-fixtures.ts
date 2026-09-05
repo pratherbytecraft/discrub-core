@@ -341,4 +341,34 @@ export const mockRateLimitResponse = (retryAfter: number = 1) => ({
   statusText: 'Too Many Requests',
   headers: new Headers({ 'retry-after': retryAfter.toString() }),
   json: async () => ({ message: 'Rate limited', retry_after: retryAfter }),
+  text: async () => JSON.stringify({ message: 'Rate limited', retry_after: retryAfter }),
+} as Response);
+
+/**
+ * A 429 whose body is not JSON (Cloudflare block page). `retryAfterHeader`
+ * null = no Retry-After header at all.
+ */
+export const mockHtmlRateLimitResponse = (
+  retryAfterHeader: number | null = null,
+  extraHeaders: Record<string, string> = {},
+) => ({
+  ok: false,
+  status: 429,
+  statusText: 'Too Many Requests',
+  headers: new Headers({
+    ...(retryAfterHeader === null ? {} : { 'retry-after': retryAfterHeader.toString() }),
+    ...extraHeaders,
+  }),
+  json: async () => { throw new SyntaxError('Unexpected token <'); },
+  text: async () => '<html><body>error code: 1015</body></html>',
+} as Response);
+
+/** A JSON 429 with Discord's `global` flag set. */
+export const mockGlobalRateLimitResponse = (retryAfter: number = 1) => ({
+  ok: false,
+  status: 429,
+  statusText: 'Too Many Requests',
+  headers: new Headers({ 'retry-after': retryAfter.toString(), 'x-ratelimit-global': 'true', 'x-ratelimit-scope': 'global' }),
+  json: async () => ({ message: 'You are being rate limited.', retry_after: retryAfter, global: true }),
+  text: async () => JSON.stringify({ message: 'You are being rate limited.', retry_after: retryAfter, global: true }),
 } as Response);

@@ -27,7 +27,90 @@ import { wait } from "../utils/common-utils.ts";
 import { SettingsHelper } from "../utils/settings-utils.ts";
 import { normalizeAttachmentExtension } from "../filtering/helpers.ts";
 
+/**
+ * Details about a 429 response, passed to `onRateLimit` and
+ * `onRateLimitExceeded` (#254).
+ */
+export interface RateLimitInfo {
+  /** Seconds Discord asked us to wait (after capping, if capped). */
+  retryAfter: number;
+  /** Discord's `global` flag / `X-RateLimit-Global` header. */
+  global: boolean;
+  /** `X-RateLimit-Scope` header when present (user | global | shared). */
+  scope?: string;
+  /** Where retryAfter came from: JSON body, Retry-After header, or the default. */
+  source: "json" | "header" | "default";
+  /** 429s seen back to back for this one request, including this one. */
+  consecutive: number;
+  /** True when retryAfter exceeded `maxWaitSecs` and the request was abandoned. */
+  capped: boolean;
+}
+
+export interface RateLimitOptions {
+  /** Longest single wait honored before giving up. Default 60 s. */
+  maxWaitSecs?: number;
+  /** Consecutive 429s on one request before giving up. Default 5. */
+  maxConsecutive?: number;
+  /** Wait used when a 429 carries neither a JSON retry_after nor a Retry-After header. Default 5 s. */
+  defaultWaitSecs?: number;
+}
+
+export const RATE_LIMIT_DEFAULTS: Required<RateLimitOptions> = {
+  maxWaitSecs: 60,
+  maxConsecutive: 5,
+  defaultWaitSecs: 5,
+};
+
+/**
+ * Cooldown shared by every DiscordService instance and every in-flight
+ * request (#254). Any 429 extends it; every request waits it out before
+ * firing, so parallel bursts (guild select) and separately constructed
+ * adapters all back off together.
+ */
+const rateLimitState = { cooldownUntilMs: 0 };
+
+/** Test hook: forget any shared cooldown. */
+export const resetRateLimitState = () => {
+  rateLimitState.cooldownUntilMs = 0;
+};
+
+/** Milliseconds until the shared cooldown lifts (0 when clear). */
+export const getRateLimitCooldownMs = () =>
+  Math.max(0, rateLimitState.cooldownUntilMs - Date.now());
+
+const parseRateLimit = async (
+  response: Response,
+  defaultWaitSecs: number,
+): Promise<{ retryAfter: number; global: boolean; scope?: string; source: RateLimitInfo["source"] }> => {
+  const headers = response.headers;
+  const headerGlobal = headers?.get?.("x-ratelimit-global") === "true";
+  const scope = headers?.get?.("x-ratelimit-scope") ?? undefined;
+  let text = "";
+  try {
+    text = await response.text();
+  } catch {
+    text = "";
+  }
+  try {
+    const json = JSON.parse(text) as { retry_after?: unknown; global?: unknown };
+    const retryAfter = Number(json.retry_after);
+    if (Number.isFinite(retryAfter) && retryAfter >= 0) {
+      return { retryAfter, global: json.global === true || headerGlobal, scope, source: "json" };
+    }
+  } catch {
+    // Not JSON (Cloudflare block page and friends) — fall through.
+  }
+  const headerValue = headers?.get?.("retry-after");
+  const header = headerValue == null ? NaN : Number(headerValue);
+  if (Number.isFinite(header) && header >= 0) {
+    return { retryAfter: header, global: headerGlobal, scope, source: "header" };
+  }
+  return { retryAfter: defaultWaitSecs, global: headerGlobal, scope, source: "default" };
+};
+
 interface DiscordServiceOptions {
+  /** Tuning for 429 handling (#254). Unset fields use RATE_LIMIT_DEFAULTS. */
+  rateLimit?: RateLimitOptions;
   /**
    * When false, the service never sleeps before a request — the
    * search/delete delay settings are ignored and pacing is entirely
@@ -45,7 +128,15 @@ class DiscordService {
   deleteDelaySecs = 0;
   delayModifierSecs = 0;
   autoDelay = true;
-  onRateLimit?: (retryAfter: number) => void;
+  rateLimit: Required<RateLimitOptions> = { ...RATE_LIMIT_DEFAULTS };
+  /** Fires before each 429 wait. The second argument is new in 1.0.11 (#254). */
+  onRateLimit?: (retryAfter: number, info: RateLimitInfo) => void;
+  /**
+   * Fires when a request is abandoned because Discord kept rate limiting
+   * it (#254). The response the caller gets carries status 429 and
+   * `rateLimited: true`. Hosts should stop the running operation.
+   */
+  onRateLimitExceeded?: (info: RateLimitInfo) => void;
   onDelay?: (delaySecs: number, delayType: 'search' | 'delete') => void;
   DISCORD_API_URL = "https://discord.com/api/v10";
   DISCORD_USERS_ENDPOINT = `${this.DISCORD_API_URL}/users`;
@@ -59,6 +150,7 @@ class DiscordService {
       this.delayModifierSecs = SettingsHelper.getNumber(settings, DiscrubSetting.DELAY_MODIFIER, 0);
     }
     this.autoDelay = options?.autoDelay ?? true;
+    this.rateLimit = { ...RATE_LIMIT_DEFAULTS, ...(options?.rateLimit ?? {}) };
   }
 
   generateSnowflake = (date: Date = new Date()): string =>
@@ -103,9 +195,17 @@ class DiscordService {
     isBlob: boolean = false,
   ): Promise<DiscordApiResponse<T>> => {
     let apiResponse: DiscordApiResponse<T> = { success: false };
+    let consecutive429 = 0;
     try {
       let requestComplete = false;
       while (!requestComplete) {
+        // Shared cooldown (#254): if any request recently drew a 429,
+        // wait it out before adding to the pile.
+        const cooldownMs = getRateLimitCooldownMs();
+        if (cooldownMs > 0) {
+          await wait(cooldownMs / 1000);
+        }
+
         const response = await promise();
         const { status, ok } = response;
         if (ok) {
@@ -122,10 +222,40 @@ class DiscordService {
             apiResponse = { success: true, status };
           }
         } else if (status === 429) {
-          // Request must be re-attempted after x seconds
-          const json = await response.json();
-          this.onRateLimit?.(json.retry_after);
-          await wait(json.retry_after);
+          consecutive429 += 1;
+          const parsed = await parseRateLimit(response, this.rateLimit.defaultWaitSecs);
+          const capped = parsed.retryAfter > this.rateLimit.maxWaitSecs;
+          const exhausted = consecutive429 >= this.rateLimit.maxConsecutive;
+          const info: RateLimitInfo = {
+            retryAfter: capped ? this.rateLimit.maxWaitSecs : parsed.retryAfter,
+            global: parsed.global,
+            scope: parsed.scope,
+            source: parsed.source,
+            consecutive: consecutive429,
+            capped,
+          };
+          // Every 429 extends the shared cooldown so nothing else fires
+          // into the same window.
+          rateLimitState.cooldownUntilMs = Math.max(
+            rateLimitState.cooldownUntilMs,
+            Date.now() + info.retryAfter * 1000,
+          );
+          if (capped || exhausted) {
+            // Give up with a real status so callers can stop the
+            // operation instead of reading this as a network blip.
+            requestComplete = true;
+            apiResponse = {
+              success: false,
+              status: 429,
+              rateLimited: true,
+              retryAfter: parsed.retryAfter,
+            };
+            this.onRateLimitExceeded?.(info);
+            console.error("Request abandoned after repeated rate limiting", info);
+          } else {
+            this.onRateLimit?.(info.retryAfter, info);
+            await wait(info.retryAfter);
+          }
         } else {
           // Request failed — preserve status for caller to distinguish error types
           requestComplete = true;

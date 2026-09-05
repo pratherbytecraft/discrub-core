@@ -4,6 +4,7 @@ import type {
   MessageModificationConfig,
   DeleteConfiguration,
 } from "../types.ts";
+import { coreMessages } from "../core-messages.ts";
 
 /**
  * Service for modifying messages (edit, delete, etc.)
@@ -58,7 +59,7 @@ export class MessageModificationService {
 
       if (isMissingPermission) {
         await this.config.notificationManager?.notify(
-          "Permission missing for message, skipping edit",
+          coreMessages().permissionMissingSkippingEdit(),
           1,
         );
       } else {
@@ -68,7 +69,7 @@ export class MessageModificationService {
 
         if (!success) {
           await this.config.notificationManager?.notify(
-            "You do not have permission to modify this message!",
+            coreMessages().noPermissionToModifyMessage(),
             2,
           );
         }
@@ -132,7 +133,7 @@ export class MessageModificationService {
 
       if (isMissingPermission) {
         await this.config.notificationManager?.notify(
-          "You do not have permission to modify content in this location, skipping",
+          coreMessages().noPermissionToModifyLocation(),
           1,
         );
       } else {
@@ -188,7 +189,7 @@ export class MessageModificationService {
 
       if (!success) {
         await this.config.notificationManager?.notify(
-          "You do not have permission to modify this message!",
+          coreMessages().noPermissionToModifyMessage(),
           2,
         );
       }
@@ -200,7 +201,7 @@ export class MessageModificationService {
 
       if (!success) {
         await this.config.notificationManager?.notify(
-          "You do not have permission to modify this message!",
+          coreMessages().noPermissionToModifyMessage(),
           2,
         );
       }
@@ -245,7 +246,7 @@ export class MessageModificationService {
 
           if (!success) {
             await this.config.notificationManager?.notify(
-              `Unable to remove reaction from ${userMapping?.userName || userId}`,
+              coreMessages().unableToRemoveReaction(userMapping?.userName || userId),
               2,
             );
           }

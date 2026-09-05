@@ -3,6 +3,7 @@ import type { Message, Channel, User, GuildMemberObject } from "../types/discord
 import type { SearchCriteria } from "../types/discrub-types.ts";
 import { MessageType, IsPinnedType } from "../enum/discord-enum.ts";
 import { messageTypeEquals } from "../utils/discrub-utils.ts";
+import { coreMessages } from "./core-messages.ts";
 
 // Constants
 export const OFFSET_INCREMENT = 25;
@@ -61,9 +62,9 @@ export function getNextSearchStatus(
   channel?: Channel,
 ): string {
   if (isGuildForum(channel)) {
-    return `Retrieved ${threads.length} threads`;
+    return coreMessages().retrievedThreads(threads.length);
   } else {
-    return `Retrieved ${messages.length} of ${totalMessages} search results`;
+    return coreMessages().retrievedSearchResults(messages.length, totalMessages);
   }
 }
 

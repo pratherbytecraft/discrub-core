@@ -19,6 +19,7 @@ import {
   getThreadsFromMessages,
 } from "../utils.ts";
 import { PaginationHelper } from "../pagination.ts";
+import { coreMessages } from "../core-messages.ts";
 
 export class MessageFetchService {
   private paginationHelper: PaginationHelper;
@@ -195,7 +196,7 @@ export class MessageFetchService {
       // Fetch messages from all threads
       for (const thread of trackedThreads) {
         this.config.onStatus?.(
-          `Retrieving messages from thread: ${getThreadEntityName(thread)}`,
+          coreMessages().retrievingThreadMessages(getThreadEntityName(thread)),
         );
         messages.push(...(await this.fetchMessagesFromChannel(thread.id)));
       }
@@ -224,7 +225,7 @@ export class MessageFetchService {
         const hasValidMessages = batch[0]?.content || batch[0]?.attachments;
         if (hasValidMessages) {
           messageCount += batch.length;
-          this.config.onStatus?.(`Retrieved ${messageCount} messages`);
+          this.config.onStatus?.(coreMessages().retrievedMessages(messageCount));
         }
       },
     );
@@ -258,7 +259,7 @@ export class MessageFetchService {
 
       if (!trackMap[message.id]) {
         this.config.onStatus?.(
-          `Searching reactions (${i + 1}/${messages.length})`,
+          coreMessages().searchingReactions(i + 1, messages.length),
         );
 
         const { success, data } = await this.config.apiClient.fetchMessageData(
@@ -324,7 +325,7 @@ export class MessageFetchService {
       if (trackMap[parentId]) continue; // already resolved via a prior around-window
 
       this.config.onStatus?.(
-        `Resolving reply parents (${i + 1}/${eligible.length})`,
+        coreMessages().resolvingReplyParents(i + 1, eligible.length),
       );
 
       const { success, data } = await this.config.apiClient.fetchMessageData(

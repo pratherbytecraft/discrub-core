@@ -13,6 +13,7 @@ import {
   defaultGMOMappingData,
 } from "../utils.ts";
 import { getEncodedEmoji } from "../utils.ts";
+import { coreMessages } from "../core-messages.ts";
 
 export class UserDataEnrichmentService {
   constructor(private config: UserEnrichmentConfig) {}
@@ -112,7 +113,7 @@ export class UserDataEnrichmentService {
 
       // Fetch display name if needed
       if (needsDisplayName) {
-        this.config.onStatus?.(`Retrieving user alias for ${userName || userId}`);
+        this.config.onStatus?.(coreMessages().retrievingUserAlias(userName || userId));
 
         const { success, status, data } = await this.config.apiClient.getUser(
           this.config.token,
@@ -138,7 +139,7 @@ export class UserDataEnrichmentService {
       if (needsGuildData) {
         const updatedMapping = updateMap[userId];
         this.config.onStatus?.(
-          `Retrieving server data for ${updatedMapping.userName || userId}`,
+          coreMessages().retrievingServerData(updatedMapping.userName || userId),
         );
 
         const { success, data } = await this.config.apiClient.fetchGuildUser(

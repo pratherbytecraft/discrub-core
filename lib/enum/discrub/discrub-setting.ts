@@ -44,4 +44,7 @@ export enum DiscrubSetting {
 
   APP_TOUR_SHELL_COMPLETED = "appTourShellCompleted",
   APP_TOUR_CONTEXTUAL_COMPLETED = "appTourContextualCompleted",
+
+  /** UI language code ("en", "de"); empty until first resolved. */
+  APP_LANGUAGE = "appLanguage",
 }

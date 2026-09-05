@@ -10,6 +10,7 @@ import type { ExportReactionMap } from "../../types/discrub-types.ts";
 import type { Reaction } from "../../types/discord-types.ts";
 import { PaginationHelper } from "../pagination.ts";
 import { getEncodedEmoji } from "../utils.ts";
+import { coreMessages } from "../core-messages.ts";
 
 const REACTION_TYPE_NORMAL = 0;
 const REACTION_TYPE_BURST = 1;
@@ -40,7 +41,12 @@ export class ReactionEnrichmentService {
           const encodedEmoji = getEncodedEmoji(emoji);
 
           this.config.onStatus?.(
-            `Retrieving reaction users for ${emoji.name || "unknown"} (${mI + 1}/${filteredMessages.length}) ${!!emoji.id ? "[custom]" : ""}`,
+            coreMessages().retrievingReactionUsers(
+              emoji.name || "unknown",
+              mI + 1,
+              filteredMessages.length,
+              !!emoji.id,
+            ),
           );
 
           if ((await this.shouldStop()) || !encodedEmoji) break;

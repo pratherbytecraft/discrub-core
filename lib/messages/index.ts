@@ -12,6 +12,13 @@ export { PurgeService } from "./services/purge-service.ts";
 // Utilities
 export * from "./utils.ts";
 export { PaginationHelper } from "./pagination.ts";
+export {
+  coreMessages,
+  setCoreMessages,
+  resetCoreMessages,
+  DEFAULT_CORE_MESSAGES,
+} from "./core-messages.ts";
+export type { CoreMessages } from "./core-messages.ts";
 
 // Types
 export type * from "./types.ts";

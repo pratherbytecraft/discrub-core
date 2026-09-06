@@ -47,4 +47,6 @@ export enum DiscrubSetting {
 
   /** UI language code ("en", "de"); empty until first resolved. */
   APP_LANGUAGE = "appLanguage",
+  /** "true" to pause long operations for a rest break on a fixed cadence. */
+  REST_BREAKS = "restBreaks",
 }

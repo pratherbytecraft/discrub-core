@@ -34,6 +34,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `DiscordServiceOptions.rateLimit` (`maxWaitSecs`, `maxConsecutive`,
   `defaultWaitSecs`) and the exported `RATE_LIMIT_DEFAULTS`.
 - `DiscordApiResponse.rateLimited` / `retryAfter` (optional, additive).
+- `onNetworkFailureStreak(consecutive)` fires on every thrown fetch once
+  `NETWORK_FAILURE_STREAK_THRESHOLD` (3) requests in a row got no HTTP
+  response; any response resets the streak. A host that is online when
+  this fires is being refused, not disconnected, and should stop.
+- `DiscrubSetting.REST_BREAKS` ("true"/"false"): the host pauses long
+  operations on a fixed cadence.
 
 ## [1.0.10] - 2026-08-30
 

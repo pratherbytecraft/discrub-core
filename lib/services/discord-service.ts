@@ -62,6 +62,15 @@ export const RATE_LIMIT_DEFAULTS: Required<RateLimitOptions> = {
 };
 
 /**
+ * Consecutive requests that produced no HTTP response at all (the fetch
+ * threw) before `onNetworkFailureStreak` fires. A block page without
+ * CORS headers, a dropped connection and a captcha wall all look the
+ * same from inside a browser: a thrown fetch. The host decides which it
+ * is (it can see `navigator.onLine`); this only counts.
+ */
+export const NETWORK_FAILURE_STREAK_THRESHOLD = 3;
+
+/**
  * Cooldown shared by every DiscordService instance and every in-flight
  * request (#254). Any 429 extends it; every request waits it out before
  * firing, so parallel bursts (guild select) and separately constructed
@@ -137,6 +146,15 @@ class DiscordService {
    * `rateLimited: true`. Hosts should stop the running operation.
    */
   onRateLimitExceeded?: (info: RateLimitInfo) => void;
+  /**
+   * Fires on every thrown fetch once `NETWORK_FAILURE_STREAK_THRESHOLD`
+   * requests in a row have failed without an HTTP response. Any request
+   * that gets a response, success or not, resets the streak. A host that
+   * is online when this fires is being refused, not disconnected, and
+   * should stop the running operation instead of retrying.
+   */
+  onNetworkFailureStreak?: (consecutive: number) => void;
+  private consecutiveNetworkFailures = 0;
   onDelay?: (delaySecs: number, delayType: 'search' | 'delete') => void;
   DISCORD_API_URL = "https://discord.com/api/v10";
   DISCORD_USERS_ENDPOINT = `${this.DISCORD_API_URL}/users`;
@@ -207,6 +225,8 @@ class DiscordService {
         }
 
         const response = await promise();
+        // Discord answered; whatever it said, the network is not the problem.
+        this.consecutiveNetworkFailures = 0;
         const { status, ok } = response;
         if (ok) {
           // Request was successful
@@ -266,6 +286,10 @@ class DiscordService {
       return apiResponse;
     } catch (e) {
       console.error("Request threw an exception", e);
+      this.consecutiveNetworkFailures += 1;
+      if (this.consecutiveNetworkFailures >= NETWORK_FAILURE_STREAK_THRESHOLD) {
+        this.onNetworkFailureStreak?.(this.consecutiveNetworkFailures);
+      }
       return apiResponse;
     }
   };

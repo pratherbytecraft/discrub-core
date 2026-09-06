@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { DiscordService, resetRateLimitState, getRateLimitCooldownMs, RATE_LIMIT_DEFAULTS } from './discord-service.ts';
+import { DiscordService, resetRateLimitState, getRateLimitCooldownMs, RATE_LIMIT_DEFAULTS, NETWORK_FAILURE_STREAK_THRESHOLD } from './discord-service.ts';
 import { setSleepImplementation } from '../utils/common-utils.ts';
 import {
   mockUser,
@@ -316,6 +316,44 @@ describe('DiscordService', () => {
       await service.getUser(testAuth, testUserId);
 
       expect(waitSpy).toHaveBeenCalledWith(retryAfter);
+    });
+  });
+
+  describe('Network failure streaks', () => {
+    it('fires onNetworkFailureStreak once the threshold of thrown fetches is reached', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+      const onStreak = vi.fn();
+      service.onNetworkFailureStreak = onStreak;
+
+      for (let i = 0; i < NETWORK_FAILURE_STREAK_THRESHOLD - 1; i++) {
+        const result = await service.getUser(testAuth, testUserId);
+        expect(result).toEqual({ success: false });
+      }
+      expect(onStreak).not.toHaveBeenCalled();
+
+      await service.getUser(testAuth, testUserId);
+      expect(onStreak).toHaveBeenCalledTimes(1);
+      expect(onStreak).toHaveBeenCalledWith(NETWORK_FAILURE_STREAK_THRESHOLD);
+
+      // Every further thrown fetch keeps reporting, with the growing count.
+      await service.getUser(testAuth, testUserId);
+      expect(onStreak).toHaveBeenLastCalledWith(NETWORK_FAILURE_STREAK_THRESHOLD + 1);
+    });
+
+    it('resets the streak on any HTTP response, even a failing one', async () => {
+      const mockFetch = vi.fn()
+        .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+        .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+        .mockResolvedValueOnce(mockErrorResponse(403))
+        .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+        .mockRejectedValueOnce(new TypeError('Failed to fetch'));
+      vi.stubGlobal('fetch', mockFetch);
+      const onStreak = vi.fn();
+      service.onNetworkFailureStreak = onStreak;
+
+      for (let i = 0; i < 5; i++) await service.getUser(testAuth, testUserId);
+
+      expect(onStreak).not.toHaveBeenCalled();
     });
   });
 

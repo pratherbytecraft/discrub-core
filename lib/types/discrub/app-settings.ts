@@ -40,6 +40,7 @@ type AppSettingsMap = {
   [DiscrubSetting.APP_TOUR_SHELL_COMPLETED]: string;
   [DiscrubSetting.APP_TOUR_CONTEXTUAL_COMPLETED]: string;
   [DiscrubSetting.APP_LANGUAGE]: string;
+  [DiscrubSetting.REST_BREAKS]: string;
 };
 
 export type AppSettings = AppSettingsMap;

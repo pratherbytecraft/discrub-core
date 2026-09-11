@@ -41,6 +41,7 @@ type AppSettingsMap = {
   [DiscrubSetting.APP_TOUR_CONTEXTUAL_COMPLETED]: string;
   [DiscrubSetting.APP_LANGUAGE]: string;
   [DiscrubSetting.REST_BREAKS]: string;
+  [DiscrubSetting.RETRY_WAIT]: string;
 };
 
 export type AppSettings = AppSettingsMap;

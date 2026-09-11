@@ -49,4 +49,6 @@ export enum DiscrubSetting {
   APP_LANGUAGE = "appLanguage",
   /** "true" to pause long operations for a rest break on a fixed cadence. */
   REST_BREAKS = "restBreaks",
+  /** Seconds to wait before the first retry of a failed request; doubles each retry. */
+  RETRY_WAIT = "retryWait",
 }

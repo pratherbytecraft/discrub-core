@@ -42,6 +42,7 @@ type AppSettingsMap = {
   [DiscrubSetting.APP_LANGUAGE]: string;
   [DiscrubSetting.REST_BREAKS]: string;
   [DiscrubSetting.RETRY_WAIT]: string;
+  [DiscrubSetting.APP_LAYOUT]: string;
 };
 
 export type AppSettings = AppSettingsMap;

@@ -5,6 +5,14 @@ All notable changes to `discrub-core` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.13] - 2026-09-13
+
+### Added
+
+- `DiscrubSetting.APP_LAYOUT` and its `AppSettings` field. The host reads it as the
+  name of the screen layout to render (classic, native, workbench, simple, operator
+  or timeline). Core does not interpret it.
+
 ## [1.0.12] - 2026-09-11
 
 ### Added

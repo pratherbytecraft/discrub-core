@@ -51,4 +51,6 @@ export enum DiscrubSetting {
   REST_BREAKS = "restBreaks",
   /** Seconds to wait before the first retry of a failed request; doubles each retry. */
   RETRY_WAIT = "retryWait",
+  /** The host's screen layout: classic, native, workbench, simple, operator or timeline. */
+  APP_LAYOUT = "appLayout",
 }

@@ -43,6 +43,9 @@ type AppSettingsMap = {
   [DiscrubSetting.REST_BREAKS]: string;
   [DiscrubSetting.RETRY_WAIT]: string;
   [DiscrubSetting.APP_LAYOUT]: string;
+  [DiscrubSetting.APP_SCRUBLINGS_ENABLED]: string;
+  [DiscrubSetting.APP_SCRUBLINGS_PICKED]: string;
+  [DiscrubSetting.APP_SCRUBLINGS_POSITIONS]: string;
 };
 
 export type AppSettings = AppSettingsMap;

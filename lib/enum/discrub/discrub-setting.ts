@@ -53,4 +53,10 @@ export enum DiscrubSetting {
   RETRY_WAIT = "retryWait",
   /** The host's screen layout: classic, native, workbench, simple, operator or timeline. */
   APP_LAYOUT = "appLayout",
+  /** "true" to show the Scrublings, the pixel characters on the host's top bar. */
+  APP_SCRUBLINGS_ENABLED = "appScrublingsEnabled",
+  /** JSON list of the picked Scrubling ids, in order, at most three. */
+  APP_SCRUBLINGS_PICKED = "appScrublingsPicked",
+  /** JSON map of Scrubling id to its dragged position as a fraction of the bar's free stretch. */
+  APP_SCRUBLINGS_POSITIONS = "appScrublingsPositions",
 }

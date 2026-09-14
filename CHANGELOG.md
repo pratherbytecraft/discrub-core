@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `DiscrubSetting.APP_LAYOUT` and its `AppSettings` field. The host reads it as the
   name of the screen layout to render (classic, native, workbench, simple, operator
   or timeline). Core does not interpret it.
+- `DiscrubSetting.APP_SCRUBLINGS_ENABLED`, `APP_SCRUBLINGS_PICKED` and
+  `APP_SCRUBLINGS_POSITIONS` and their `AppSettings` fields. The host reads them as
+  the switch, the picked list and the dragged positions of the Scrublings, the pixel
+  characters on its top bar. Core does not interpret them.
 
 ## [1.0.12] - 2026-09-11
 

@@ -59,4 +59,10 @@ export enum DiscrubSetting {
   APP_SCRUBLINGS_PICKED = "appScrublingsPicked",
   /** JSON map of Scrubling id to its dragged position as a fraction of the bar's free stretch. */
   APP_SCRUBLINGS_POSITIONS = "appScrublingsPositions",
+  /** JSON look of the person's own Scrubling (name, body, skin, hair, clothes, held items). "{}" means not set up. */
+  APP_SCRUBLINGS_AVATAR = "appScrublingsAvatar",
+  /** JSON list of the Scrubling cosmetic items the person has earned. */
+  APP_SCRUBLINGS_UNLOCKS = "appScrublingsUnlocks",
+  /** JSON counters of what the person has done in the app, read by the host to earn Scrubling items. */
+  APP_SCRUBLINGS_COUNTERS = "appScrublingsCounters",
 }

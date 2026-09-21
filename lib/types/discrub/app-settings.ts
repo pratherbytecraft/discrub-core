@@ -46,6 +46,9 @@ type AppSettingsMap = {
   [DiscrubSetting.APP_SCRUBLINGS_ENABLED]: string;
   [DiscrubSetting.APP_SCRUBLINGS_PICKED]: string;
   [DiscrubSetting.APP_SCRUBLINGS_POSITIONS]: string;
+  [DiscrubSetting.APP_SCRUBLINGS_AVATAR]: string;
+  [DiscrubSetting.APP_SCRUBLINGS_UNLOCKS]: string;
+  [DiscrubSetting.APP_SCRUBLINGS_COUNTERS]: string;
 };
 
 export type AppSettings = AppSettingsMap;

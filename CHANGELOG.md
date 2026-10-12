@@ -5,6 +5,21 @@ All notable changes to `discrub-core` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.15] - 2026-10-18
+
+### Added
+
+- `formatSystemMessage` takes an optional `translate(key, params)`. It is asked for
+  `systemMessage.<name>` with the template values, names already in bold, and its
+  answer replaces the English line. No answer, or the key echoed back, keeps the
+  English. `SYSTEM_MESSAGE_KEYS` lists every key with its English template.
+- `setRateLimitListener(fn)` sets one listener for every `DiscordService` instance.
+  It hears a `rateLimited` event on each 429 and a `cooldownWait` event, once per
+  window, when a request is about to wait out the shared cooldown for longer than
+  `RATE_LIMIT_WAIT_NOTICE_MS` (2 s).
+- A failed response carries Discord's JSON error `code` when the body has one
+  (eg. 10003 Unknown Channel).
+
 ## [1.0.14] - 2026-09-20
 
 ### Added

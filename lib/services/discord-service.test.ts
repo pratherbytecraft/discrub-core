@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { DiscordService, resetRateLimitState, getRateLimitCooldownMs, RATE_LIMIT_DEFAULTS, NETWORK_FAILURE_STREAK_THRESHOLD } from './discord-service.ts';
+import { DiscordService, resetRateLimitState, getRateLimitCooldownMs, setRateLimitListener, RATE_LIMIT_DEFAULTS, RATE_LIMIT_WAIT_NOTICE_MS, NETWORK_FAILURE_STREAK_THRESHOLD } from './discord-service.ts';
 import { setSleepImplementation } from '../utils/common-utils.ts';
 import {
   mockUser,
@@ -495,6 +495,86 @@ describe('DiscordService', () => {
       vi.stubGlobal('fetch', mockFetchSuccess(mockUser));
       await service.getUser(testAuth, testUserId);
       expect(sleeps).toEqual([]);
+    });
+  });
+
+  describe('Shared rate limit listener', () => {
+    let sleeps: number[];
+    let events: unknown[];
+    beforeEach(() => {
+      sleeps = [];
+      events = [];
+      setSleepImplementation(async (ms) => { sleeps.push(ms); });
+      resetRateLimitState();
+      setRateLimitListener((event) => events.push(event));
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+    });
+    afterEach(() => {
+      setSleepImplementation();
+      resetRateLimitState();
+      setRateLimitListener();
+    });
+
+    it('fires on a 429 from an instance with no hooks of its own', async () => {
+      vi.stubGlobal('fetch', vi.fn()
+        .mockResolvedValueOnce(mockRateLimitResponse(3))
+        .mockResolvedValueOnce(mockSuccessResponse(mockUser)));
+
+      await new DiscordService().getUser(testAuth, testUserId);
+
+      expect(events).toEqual([
+        { type: 'rateLimited', info: expect.objectContaining({ retryAfter: 3, consecutive: 1, capped: false }) },
+      ]);
+    });
+
+    it('fires on a 429 that ends in the request being abandoned', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(mockRateLimitResponse(600)));
+
+      await service.getUser(testAuth, testUserId);
+
+      expect(events).toEqual([
+        { type: 'rateLimited', info: expect.objectContaining({ capped: true }) },
+      ]);
+    });
+
+    it('announces a long cooldown wait once per window', async () => {
+      vi.stubGlobal('fetch', vi.fn()
+        .mockResolvedValueOnce(mockRateLimitResponse(5))
+        .mockResolvedValue(mockSuccessResponse(mockUser)));
+      await service.getUser(testAuth, testUserId);
+      events = [];
+
+      // The instant sleep leaves the clock alone, so the window is still open.
+      const other = new DiscordService();
+      await Promise.all([other.getUser(testAuth, testUserId), other.getUser(testAuth, testUserId)]);
+      await other.getUser(testAuth, testUserId);
+
+      expect(events).toEqual([{ type: 'cooldownWait', waitMs: expect.any(Number) }]);
+      expect((events[0] as { waitMs: number }).waitMs).toBeGreaterThan(RATE_LIMIT_WAIT_NOTICE_MS);
+    });
+
+    it('stays quiet for short cooldown waits', async () => {
+      vi.stubGlobal('fetch', vi.fn()
+        .mockResolvedValueOnce(mockRateLimitResponse(RATE_LIMIT_WAIT_NOTICE_MS / 1000 / 2))
+        .mockResolvedValue(mockSuccessResponse(mockUser)));
+      await service.getUser(testAuth, testUserId);
+      events = [];
+
+      await new DiscordService().getUser(testAuth, testUserId);
+
+      expect(sleeps.length).toBeGreaterThan(1);
+      expect(events).toEqual([]);
+    });
+
+    it('keeps going when the listener throws', async () => {
+      setRateLimitListener(() => { throw new Error('boom'); });
+      vi.stubGlobal('fetch', vi.fn()
+        .mockResolvedValueOnce(mockRateLimitResponse(1))
+        .mockResolvedValueOnce(mockSuccessResponse(mockUser)));
+
+      const result = await service.getUser(testAuth, testUserId);
+
+      expect(result.success).toBe(true);
     });
   });
 
@@ -2149,6 +2229,32 @@ describe('DiscordService', () => {
         'Request could not be completed',
         expect.any(Object)
       );
+    });
+
+    it('puts Discord\'s error code on a failed response', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: false,
+        status: 404,
+        headers: new Headers(),
+        json: async () => ({ message: 'Unknown Channel', code: 10003 }),
+      } as Response));
+
+      const result = await service.getUser(testAuth, testUserId);
+
+      expect(result).toEqual({ success: false, status: 404, code: 10003 });
+    });
+
+    it('leaves the code off when the failed body is not JSON', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: false,
+        status: 502,
+        headers: new Headers(),
+        json: async () => { throw new SyntaxError('Unexpected token <'); },
+      } as unknown as Response));
+
+      const result = await service.getUser(testAuth, testUserId);
+
+      expect(result).toEqual({ success: false, status: 502 });
     });
 
     it('should handle 401 unauthorized with status code', async () => {

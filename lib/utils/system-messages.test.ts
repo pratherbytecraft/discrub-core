@@ -3,6 +3,7 @@ import {
   formatSystemMessage,
   isSystemMessageType,
   SystemMessageKind,
+  SYSTEM_MESSAGE_KEYS,
   USER_JOIN_VARIANTS,
 } from "./system-messages";
 import type { Message } from "../types/discord/message";
@@ -418,5 +419,89 @@ describe("formatSystemMessage", () => {
         "**\\*\\*sneaky\\*\\*** pinned a message to this channel. See all pinned messages.",
       );
     });
+  });
+});
+
+describe("formatSystemMessage translate", () => {
+  const german: Record<string, string> = {
+    "systemMessage.pin": "{author} hat eine Nachricht in diesem Kanal angeheftet.",
+    "systemMessage.recipientAdd": "{author} hat {mention} zur Gruppe hinzugefügt.",
+    "systemMessage.join_0": "{author} ist der Party beigetreten.",
+    "systemMessage.roleJoinedMonths": "{author} ist {tier} beigetreten ({months} Monate).",
+  };
+  const translate = (key: string, params: Record<string, string | number>) => {
+    const template = german[key];
+    return template?.replace(/\{(\w+)\}/g, (_, p: string) => String(params[p]));
+  };
+
+  it("uses the translated line with bold names filled in", () => {
+    expect(formatSystemMessage(makeMessage(6), { translate })?.text).toBe(
+      "**Alice** hat eine Nachricht in diesem Kanal angeheftet.",
+    );
+    expect(
+      formatSystemMessage(makeMessage(1, { mentions: [BOB] }), { translate })?.text,
+    ).toBe("**Alice** hat **Bob** zur Gruppe hinzugefügt.");
+  });
+
+  it("asks for the join line by its variant index", () => {
+    const keys: string[] = [];
+    const ts = new Date(13 * 1000).toISOString(); // 13000 % 13 = 0
+    const result = formatSystemMessage(makeMessage(7, { timestamp: ts }), {
+      translate: (key, params) => {
+        keys.push(key);
+        return translate(key, params);
+      },
+    });
+    expect(keys).toContain("systemMessage.join_0");
+    expect(result?.text).toBe("**Alice** ist der Party beigetreten.");
+  });
+
+  it("passes the month count for pluralizing", () => {
+    const message = makeMessage(25, {
+      role_subscription_data: {
+        role_subscription_listing_id: "1",
+        tier_name: "Gold",
+        total_months_subscribed: 3,
+        is_renewal: false,
+      },
+    } as Partial<Message>);
+    expect(formatSystemMessage(message, { translate })?.text).toBe(
+      "**Alice** ist **Gold** beigetreten (3 Monate).",
+    );
+  });
+
+  it("falls back to English when the translator has no line or echoes the key", () => {
+    expect(formatSystemMessage(makeMessage(5), { translate })?.text).toBe(
+      "**Alice** changed the channel icon.",
+    );
+    expect(
+      formatSystemMessage(makeMessage(5), { translate: (key) => key })?.text,
+    ).toBe("**Alice** changed the channel icon.");
+  });
+
+  it("gives the same English with and without a translator that knows nothing", () => {
+    for (const type of [1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 14, 18, 22, 24, 25, 27, 31, 36, 38, 44, 46, 99]) {
+      const message = makeMessage(type, { mentions: [BOB], content: "x" });
+      expect(formatSystemMessage(message, { translate: () => undefined })).toEqual(
+        formatSystemMessage(message),
+      );
+    }
+  });
+
+  it("lists an English template for every key it asks for", () => {
+    const asked = new Set<string>();
+    const record = (key: string) => {
+      asked.add(key);
+      return undefined;
+    };
+    for (let type = 1; type <= 50; type++) {
+      for (const content of ["", "x"]) {
+        formatSystemMessage(makeMessage(type, { content, author: undefined }), { translate: record });
+      }
+    }
+    for (const key of asked) {
+      if (/^systemMessage\.join_\d+$/.test(key)) continue;
+      expect(SYSTEM_MESSAGE_KEYS[key], key).toBeDefined();
+    }
   });
 });

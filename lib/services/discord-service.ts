@@ -78,9 +78,49 @@ export const NETWORK_FAILURE_STREAK_THRESHOLD = 3;
  */
 const rateLimitState = { cooldownUntilMs: 0 };
 
+/**
+ * Something the shared rate limit did, passed to the listener set with
+ * `setRateLimitListener`. `rateLimited` fires on every 429 from any
+ * instance, including one that is about to be abandoned (`info.capped`
+ * or `info.consecutive` at the limit). `cooldownWait` fires when a
+ * request is about to wait out the shared cooldown for longer than
+ * `RATE_LIMIT_WAIT_NOTICE_MS`, once per cooldown window, so a burst of
+ * parallel requests waiting on the same window reports it once.
+ */
+export type RateLimitEvent =
+  | { type: "rateLimited"; info: RateLimitInfo }
+  | { type: "cooldownWait"; waitMs: number };
+
+/** Shortest pre-request cooldown wait that fires a `cooldownWait` event. */
+export const RATE_LIMIT_WAIT_NOTICE_MS = 2000;
+
+let rateLimitListener: ((event: RateLimitEvent) => void) | undefined;
+let announcedCooldownUntilMs = 0;
+
+/**
+ * Set (or clear, with no argument) the one module level listener for
+ * rate limit activity across every DiscordService instance. Hosts use it
+ * to say they are waiting on Discord, even when the request came from an
+ * instance they did not attach per-instance hooks to.
+ */
+export const setRateLimitListener = (
+  listener?: (event: RateLimitEvent) => void,
+) => {
+  rateLimitListener = listener;
+};
+
+const notifyRateLimitListener = (event: RateLimitEvent) => {
+  try {
+    rateLimitListener?.(event);
+  } catch (e) {
+    console.error("Rate limit listener threw", e);
+  }
+};
+
 /** Test hook: forget any shared cooldown. */
 export const resetRateLimitState = () => {
   rateLimitState.cooldownUntilMs = 0;
+  announcedCooldownUntilMs = 0;
 };
 
 /** Milliseconds until the shared cooldown lifts (0 when clear). */
@@ -115,6 +155,20 @@ const parseRateLimit = async (
     return { retryAfter: header, global: headerGlobal, scope, source: "header" };
   }
   return { retryAfter: defaultWaitSecs, global: headerGlobal, scope, source: "default" };
+};
+
+/**
+ * Discord's JSON error code from a failed response body
+ * (`{ "code": 10003, "message": "Unknown Channel" }`), or undefined when
+ * the body is not JSON or carries no numeric code.
+ */
+const parseErrorCode = async (response: Response): Promise<number | undefined> => {
+  try {
+    const json = (await response.json()) as { code?: unknown };
+    return typeof json?.code === "number" ? json.code : undefined;
+  } catch {
+    return undefined;
+  }
 };
 
 interface DiscordServiceOptions {
@@ -214,6 +268,10 @@ class DiscordService {
   ): Promise<DiscordApiResponse<T>> => {
     let apiResponse: DiscordApiResponse<T> = { success: false };
     let consecutive429 = 0;
+    // The window this request's own last 429 set. Its retry already
+    // waited that out (and said so through onRateLimit), so it is not
+    // announced again as a cooldown wait.
+    let ownCooldownUntilMs = 0;
     try {
       let requestComplete = false;
       while (!requestComplete) {
@@ -221,6 +279,14 @@ class DiscordService {
         // wait it out before adding to the pile.
         const cooldownMs = getRateLimitCooldownMs();
         if (cooldownMs > 0) {
+          if (
+            cooldownMs > RATE_LIMIT_WAIT_NOTICE_MS &&
+            rateLimitState.cooldownUntilMs !== ownCooldownUntilMs &&
+            announcedCooldownUntilMs !== rateLimitState.cooldownUntilMs
+          ) {
+            announcedCooldownUntilMs = rateLimitState.cooldownUntilMs;
+            notifyRateLimitListener({ type: "cooldownWait", waitMs: cooldownMs });
+          }
           await wait(cooldownMs / 1000);
         }
 
@@ -260,6 +326,8 @@ class DiscordService {
             rateLimitState.cooldownUntilMs,
             Date.now() + info.retryAfter * 1000,
           );
+          ownCooldownUntilMs = rateLimitState.cooldownUntilMs;
+          notifyRateLimitListener({ type: "rateLimited", info });
           if (capped || exhausted) {
             // Give up with a real status so callers can stop the
             // operation instead of reading this as a network blip.
@@ -280,6 +348,8 @@ class DiscordService {
           // Request failed — preserve status for caller to distinguish error types
           requestComplete = true;
           apiResponse = { success: false, status };
+          const code = await parseErrorCode(response);
+          if (code !== undefined) apiResponse.code = code;
           console.error("Request could not be completed", response);
         }
       }

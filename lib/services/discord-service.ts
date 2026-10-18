@@ -211,6 +211,9 @@ interface DiscordServiceOptions {
  * pair is searched on its own; the caller merges them. One entry when
  * there is nothing to split. Blank terms are dropped.
  */
+/** The has value Discrub sent for forwards before 1.0.16; Discord never accepted it. */
+export const LEGACY_FORWARD_HAS_VALUE = "forward";
+
 export const searchVariants = (criteria: SearchCriteria): SearchCriteria[] => {
   const terms = (criteria.searchMessageContents ?? []).filter((t) => t.trim().length > 0);
   const hasTypes = criteria.selectedHasTypes ?? [];
@@ -686,7 +689,8 @@ class DiscordService {
       urlSearchParams.append("mentions", userId);
     });
     selectedHasTypes.forEach((type: string) => {
-      urlSearchParams.append("has", type);
+      // Criteria saved before 1.0.16 may still carry the old `forward` value.
+      urlSearchParams.append("has", type === LEGACY_FORWARD_HAS_VALUE ? HasType.FORWARD : type);
     });
     if (authorType) {
       urlSearchParams.set("author_type", authorType);

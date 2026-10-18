@@ -26,6 +26,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   requires every `has` value on the same message, so Images + Forwards found
   almost nothing. Applies to `fetchSearchMessageData` and `iterateSearchResults`.
 
+### Fixed
+
+- `HasType.FORWARD` is `snapshot`, the value Discord's search accepts for forwarded
+  messages; `forward` was refused with a 400, so the Forwards filter never searched.
+  The query builder maps the old `forward` value from saved criteria to `snapshot`
+  (`LEGACY_FORWARD_HAS_VALUE`).
+
 ## [1.0.15] - 2026-10-18
 
 ### Added

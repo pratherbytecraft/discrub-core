@@ -22,7 +22,7 @@ import {
   clearAllMocks,
 } from '../__tests__/test-utils.ts';
 import { AppSettings, SearchCriteria } from '../types/discrub-types.ts';
-import { QueryStringParam, ReactionType } from '../enum/discord-enum.ts';
+import { HasType, QueryStringParam, ReactionType } from '../enum/discord-enum.ts';
 
 describe('DiscordService', () => {
   let service: DiscordService;
@@ -1359,11 +1359,11 @@ describe('DiscordService', () => {
         return has === 'image' ? page(['1', '2'], 2) : page(['2', '3'], 2);
       }));
       const res = await service.fetchSearchMessageData(testAuth, 0, testChannelId, testGuildId, {
-        ...criteria, searchMessageContents: [], selectedHasTypes: ['image', 'forward'] as any,
+        ...criteria, searchMessageContents: [], selectedHasTypes: ['image', 'snapshot'] as any,
       });
       expect(res.success).toBe(true);
       expect((res.data as any).messages.map((m: any) => m.id)).toEqual(['1', '2', '3']);
-      expect(urls.map((u) => new URL(u).searchParams.getAll('has'))).toEqual([['image'], ['forward']]);
+      expect(urls.map((u) => new URL(u).searchParams.getAll('has'))).toEqual([['image'], ['snapshot']]);
       expect(urls.every((u) => !new URL(u).searchParams.has('content'))).toBe(true);
     });
 
@@ -1374,6 +1374,15 @@ describe('DiscordService', () => {
       ]);
       expect(searchVariants({ ...criteria, searchMessageContents: [], selectedHasTypes: [] })).toHaveLength(1);
       expect(searchVariants({ ...criteria, searchMessageContents: ['solo'], selectedHasTypes: ['poll'] as any })).toHaveLength(1);
+    });
+
+    it('sends has=snapshot for forwards, also for criteria saved with the old forward value', async () => {
+      const urls: string[] = [];
+      vi.stubGlobal('fetch', vi.fn(async (url: string) => { urls.push(url); return page(['1'], 1); }));
+      await service.fetchSearchMessageData(testAuth, 0, testChannelId, testGuildId, { ...criteria, searchMessageContents: [], selectedHasTypes: [HasType.FORWARD] });
+      await service.fetchSearchMessageData(testAuth, 0, testChannelId, testGuildId, { ...criteria, searchMessageContents: [], selectedHasTypes: ['forward'] as any });
+      expect(HasType.FORWARD).toBe('snapshot');
+      expect(urls.map((u) => new URL(u).searchParams.getAll('has'))).toEqual([['snapshot'], ['snapshot']]);
     });
 
     it('is the plain single request for one term', async () => {
@@ -1494,15 +1503,15 @@ describe('DiscordService', () => {
           const has = new URL(url).searchParams.get('has') ?? '';
           const first = !served.has(has);
           served.add(has);
-          const byHas: Record<string, any[]> = { image: [makeMessage('1'), makeMessage('2')], forward: [makeMessage('2'), makeMessage('3')] };
+          const byHas: Record<string, any[]> = { image: [makeMessage('1'), makeMessage('2')], snapshot: [makeMessage('2'), makeMessage('3')] };
           return { ok: true, status: 200, json: async () => (first ? { messages: byHas[has].map((m) => [m]), total_results: 2 } : { messages: [], total_results: 2 }) };
         }));
-        const pages = await collect({ ...baseSearchCriteria, selectedHasTypes: ['image', 'forward'] as any });
+        const pages = await collect({ ...baseSearchCriteria, selectedHasTypes: ['image', 'snapshot'] as any });
         expect(pages[0].messages.map((m: any) => m.id)).toEqual(['1', '2', '3']);
         expect(pages[0].totalResults).toBe(3);
         const hasParams = calls.map((u) => new URL(u).searchParams.getAll('has'));
         expect(hasParams.every((h) => h.length === 1)).toBe(true);
-        expect(hasParams.slice(0, 2)).toEqual([['image'], ['forward']]);
+        expect(hasParams.slice(0, 2)).toEqual([['image'], ['snapshot']]);
       });
 
       it('treats a single term (or blank terms) as the plain single-term search', async () => {

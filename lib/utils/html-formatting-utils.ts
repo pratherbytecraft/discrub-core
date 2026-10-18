@@ -106,6 +106,36 @@ export const renderHeadingHtml = (level: number, text: string): string => {
 /**
  * Render hyperlink as HTML
  */
+/**
+ * Render a Discord timestamp <t:unix:style> as HTML. The text is the
+ * absolute date in the reader's locale; a relative style (R) renders the
+ * same absolute date and time, since a static page cannot keep "2 months
+ * ago" current. The title carries the full date and time.
+ */
+export const renderTimestampHtml = (unixSeconds: number, style?: string): string => {
+  const date = new Date(unixSeconds * 1000);
+  if (Number.isNaN(date.getTime())) return escapeHtml(`<t:${unixSeconds}${style ? `:${style}` : ''}>`);
+  const opts: Record<string, Intl.DateTimeFormatOptions> = {
+    t: { hour: 'numeric', minute: '2-digit' },
+    T: { hour: 'numeric', minute: '2-digit', second: '2-digit' },
+    d: { year: 'numeric', month: '2-digit', day: '2-digit' },
+    D: { year: 'numeric', month: 'long', day: 'numeric' },
+    f: { year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' },
+    F: { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' },
+  };
+  const text = date.toLocaleString(undefined, opts[style && style !== 'R' ? style : 'f']);
+  const full = date.toLocaleString(undefined, opts.F);
+  return `<span class="timestamp-mention" data-unix="${unixSeconds}" title="${escapeHtml(full)}">${escapeHtml(text)}</span>`;
+};
+
+/**
+ * Render a Discord subtext line (-# text) as HTML. Text is already escaped
+ * when called from the formatter's phase 3.
+ */
+export const renderSubtextHtml = (text: string): string => {
+  return `<span class="subtext">${text}</span>`;
+};
+
 export const renderHyperlinkHtml = (url: string): string => {
   return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(url)}</a>`;
 };
@@ -170,6 +200,13 @@ export const formatContentAsHtml = (
   autoLinkMatches.forEach(({ 0: autoLinkRef, groups }) => {
     const url = groups?.url || '';
     html = html.replaceAll(autoLinkRef, stashHtml(renderHyperlinkHtml(url)));
+  });
+
+  // Timestamps <t:unix> and <t:unix:style> (literal `<`).
+  const timestampMatches = Array.from(html.matchAll(MessageRegex.TIMESTAMP));
+  timestampMatches.forEach(({ 0: ref, groups }) => {
+    const unix = Number(groups?.unix || '0');
+    html = html.replaceAll(ref, stashHtml(renderTimestampHtml(unix, groups?.style)));
   });
 
   // Custom emojis <:name:id> and <a:name:id> (literal `<`).
@@ -247,6 +284,12 @@ export const formatContentAsHtml = (
     const level = (groups?.hashes || '#').length;
     const text = groups?.text || '';
     html = html.replaceAll(headingRef, renderHeadingHtml(level, text));
+  });
+
+  // Subtext (-# text), small muted lines under a message or in a bot embed
+  const subtextMatches = Array.from(html.matchAll(MessageRegex.SUBTEXT));
+  subtextMatches.forEach(({ 0: subtextRef, groups }) => {
+    html = html.replaceAll(subtextRef, renderSubtextHtml(groups?.text || ''));
   });
 
   // Markdown links [text](url)
@@ -358,8 +401,15 @@ export const renderEmbedAsHtml = (
   embed: Embed,
   options: EmbedRenderOptions = {}
 ): string => {
-  const { includeImages = true, includeVideos = true, mediaMap } = options;
+  const { includeImages = true, includeVideos = true, mediaMap, formattingContext } = options;
   const colorHex = colorToHex(embed.color);
+
+  // Discord renders markdown and mentions inside an embed's description
+  // and fields (a bot's `**1.** <@id>` leaderboard line). With a context
+  // those go through the message formatter; without one they stay
+  // escaped text, the pre-1.0.16 output.
+  const renderRichText = (text: string): string =>
+    formattingContext ? formatContentAsHtml(text, formattingContext) : escapeHtml(text);
 
   // Rewrite a remote URL to its local path when the archive download service
   // has captured it. No map → remote URL. Map miss → remote URL (graceful
@@ -432,7 +482,7 @@ export const renderEmbedAsHtml = (
 
   // Description
   if (embed.description) {
-    embedHtml += `<div class="embed-description">${escapeHtml(embed.description)}</div>`;
+    embedHtml += `<div class="embed-description">${renderRichText(embed.description)}</div>`;
   }
 
   // Fields
@@ -441,8 +491,8 @@ export const renderEmbedAsHtml = (
     embed.fields.forEach((field) => {
       const inlineClass = field.inline ? ' embed-field-inline' : '';
       embedHtml += `<div class="embed-field${inlineClass}">`;
-      embedHtml += `<div class="embed-field-name">${escapeHtml(field.name)}</div>`;
-      embedHtml += `<div class="embed-field-value">${escapeHtml(field.value)}</div>`;
+      embedHtml += `<div class="embed-field-name">${renderRichText(field.name)}</div>`;
+      embedHtml += `<div class="embed-field-value">${renderRichText(field.value)}</div>`;
       embedHtml += '</div>';
     });
     embedHtml += '</div>';

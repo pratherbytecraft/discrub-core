@@ -39,4 +39,11 @@ export interface EmbedRenderOptions {
    * down. Falls back to the remote URL when a lookup misses.
    */
   mediaMap?: Record<string, string>;
+  /**
+   * When present, the embed description, field names and field values
+   * render Discord markdown and mentions through `formatContentAsHtml`
+   * with this context, the way Discord draws a bot's embed. Without it
+   * those strings are escaped verbatim.
+   */
+  formattingContext?: HtmlFormattingContext;
 }

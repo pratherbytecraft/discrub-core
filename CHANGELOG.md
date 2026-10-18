@@ -5,6 +5,18 @@ All notable changes to `discrub-core` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.16] - Unreleased
+
+### Added
+
+- `renderEmbedAsHtml` takes an optional `formattingContext`. With one, the embed
+  description, field names and field values render Discord markdown and
+  mentions the way the message body does. Without one they stay escaped text.
+- `formatContentAsHtml` renders Discord timestamps (`<t:unix:style>`) as an absolute
+  date in the reader's locale (`.timestamp-mention`, full date in the title; the
+  relative style renders the same absolute date) and subtext lines (`-# text`) as
+  `.subtext`. `MessageRegex.TIMESTAMP` and `MessageRegex.SUBTEXT` are new.
+
 ## [1.0.15] - 2026-10-18
 
 ### Added

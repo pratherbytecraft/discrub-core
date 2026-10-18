@@ -13,6 +13,7 @@ import {
   renderLinkHtml,
   formatContentAsHtml,
   renderEmbedAsHtml,
+  renderTimestampHtml,
 } from './html-formatting-utils.ts';
 import type { Embed } from '../types/discord-types.ts';
 import { EmbedType } from '../enum/discord-enum.ts';
@@ -143,6 +144,19 @@ describe('html-formatting-utils', () => {
       const result = renderLinkHtml('https://example.com', '<script>xss</script>', '<script>');
       expect(result).toContain('&lt;script&gt;');
       expect(result).not.toContain('<script>xss</script>');
+    });
+  });
+
+  describe('renderTimestampHtml', () => {
+    it('renders each style as an absolute date with the full date in the title', () => {
+      const unix = 1788287560;
+      const date = new Date(unix * 1000);
+      const short = date.toLocaleString(undefined, { year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+      expect(renderTimestampHtml(unix)).toContain(`>${short}</span>`);
+      expect(renderTimestampHtml(unix, 'R')).toContain(`>${short}</span>`);
+      expect(renderTimestampHtml(unix, 'd')).toContain(date.toLocaleString(undefined, { year: 'numeric', month: '2-digit', day: '2-digit' }));
+      expect(renderTimestampHtml(unix, 'F')).toContain('title="');
+      expect(renderTimestampHtml(unix, 't')).toContain('class="timestamp-mention"');
     });
   });
 
@@ -480,6 +494,62 @@ describe('html-formatting-utils', () => {
       expect(result).toContain('Value 1');
       expect(result).toContain('Field 2');
       expect(result).toContain('embed-field-inline');
+    });
+
+    it('renders markdown and mentions in the description and fields when given a formatting context', () => {
+      const embed: Embed = {
+        type: EmbedType.RICH,
+        description: '<#345> · Sep 1 to Sep 30\n\n**1.** <@1541> · **5**',
+        fields: [{ name: '__Scanned__', value: '*5 reactions* on 3 messages' }],
+      };
+
+      const result = renderEmbedAsHtml(embed, {
+        formattingContext: {
+          userMap: { '1541': { displayName: 'Prather Bytecraft' } },
+          channelMap: { '345': { name: 'general' } },
+        },
+      });
+
+      expect(result).toContain('<strong>1.</strong>');
+      expect(result).toContain('<strong>5</strong>');
+      expect(result).toContain('@Prather Bytecraft');
+      expect(result).toContain('class="channel-mention" data-channel-id="345"');
+      expect(result).not.toContain('&lt;@1541&gt;');
+      expect(result).not.toContain('&lt;#345&gt;');
+      expect(result).toContain('<u>Scanned</u>');
+      expect(result).toContain('<em>5 reactions</em>');
+    });
+
+    it('renders subtext lines and Discord timestamps inside an embed', () => {
+      const embed: Embed = {
+        type: EmbedType.RICH,
+        description: '**Top thread**\n-# <#345> · by <@1541> · <t:1788287560:R>\n-# 🎉 2 · 🔥 1',
+      };
+
+      const result = renderEmbedAsHtml(embed, {
+        formattingContext: {
+          userMap: { '1541': { displayName: 'Prather Bytecraft' } },
+          channelMap: { '345': { name: 'general' } },
+        },
+      });
+
+      expect(result).toContain('<span class="subtext">🎉 2 · 🔥 1</span>');
+      expect(result).toContain('class="timestamp-mention" data-unix="1788287560"');
+      expect(result).not.toContain('-#');
+      expect(result).not.toContain('&lt;t:');
+      // The subtext wraps the whole line, mentions included.
+      expect(result).toMatch(/<span class="subtext"><span class="channel-mention"[^]*?<\/span> · by <span class="user-mention"[^]*?<\/span> · <span class="timestamp-mention"[^]*?<\/span><\/span>/);
+    });
+
+    it('keeps the description as escaped text without a formatting context', () => {
+      const embed: Embed = {
+        type: EmbedType.RICH,
+        description: '**1.** <@1541> <b>x</b>',
+      };
+
+      const result = renderEmbedAsHtml(embed);
+
+      expect(result).toContain('**1.** &lt;@1541&gt; &lt;b&gt;x&lt;/b&gt;');
     });
 
     it('should render embed with thumbnail', () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { DiscordService, resetRateLimitState, getRateLimitCooldownMs, setRateLimitListener, RATE_LIMIT_DEFAULTS, RATE_LIMIT_WAIT_NOTICE_MS, NETWORK_FAILURE_STREAK_THRESHOLD, rateLimitWaitFloor } from './discord-service.ts';
+import { DiscordService, searchVariants, resetRateLimitState, getRateLimitCooldownMs, setRateLimitListener, RATE_LIMIT_DEFAULTS, RATE_LIMIT_WAIT_NOTICE_MS, NETWORK_FAILURE_STREAK_THRESHOLD, rateLimitWaitFloor } from './discord-service.ts';
 import { setSleepImplementation } from '../utils/common-utils.ts';
 import {
   mockUser,
@@ -1351,6 +1351,31 @@ describe('DiscordService', () => {
       expect(res.status).toBe(500);
     });
 
+    it('runs one request per has type and merges them, so Images + Forwards finds either (has-or)', async () => {
+      const urls: string[] = [];
+      vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+        urls.push(url);
+        const has = new URL(url).searchParams.get('has');
+        return has === 'image' ? page(['1', '2'], 2) : page(['2', '3'], 2);
+      }));
+      const res = await service.fetchSearchMessageData(testAuth, 0, testChannelId, testGuildId, {
+        ...criteria, searchMessageContents: [], selectedHasTypes: ['image', 'forward'] as any,
+      });
+      expect(res.success).toBe(true);
+      expect((res.data as any).messages.map((m: any) => m.id)).toEqual(['1', '2', '3']);
+      expect(urls.map((u) => new URL(u).searchParams.getAll('has'))).toEqual([['image'], ['forward']]);
+      expect(urls.every((u) => !new URL(u).searchParams.has('content'))).toBe(true);
+    });
+
+    it('pairs every term with every has type (has-or with #244)', () => {
+      const variants = searchVariants({ ...criteria, searchMessageContents: ['alpha', ' ', 'beta'], selectedHasTypes: ['image', 'link'] as any });
+      expect(variants.map((v) => [v.searchMessageContents, v.selectedHasTypes])).toEqual([
+        [['alpha'], ['image']], [['alpha'], ['link']], [['beta'], ['image']], [['beta'], ['link']],
+      ]);
+      expect(searchVariants({ ...criteria, searchMessageContents: [], selectedHasTypes: [] })).toHaveLength(1);
+      expect(searchVariants({ ...criteria, searchMessageContents: ['solo'], selectedHasTypes: ['poll'] as any })).toHaveLength(1);
+    });
+
     it('is the plain single request for one term', async () => {
       const urls: string[] = [];
       vi.stubGlobal('fetch', vi.fn(async (url: string) => { urls.push(url); return page(['1'], 1); }));
@@ -1459,6 +1484,25 @@ describe('DiscordService', () => {
         expect(calls).toHaveLength(1);
         expect(new URL(calls[0]).searchParams.get('content')).toBe('alpha');
         expect(pages).toEqual([]);
+      });
+
+      it('searches each has type on its own and merges the first pages, so Images + Forwards finds either (has-or)', async () => {
+        const calls: string[] = [];
+        const served = new Set<string>();
+        vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+          calls.push(url);
+          const has = new URL(url).searchParams.get('has') ?? '';
+          const first = !served.has(has);
+          served.add(has);
+          const byHas: Record<string, any[]> = { image: [makeMessage('1'), makeMessage('2')], forward: [makeMessage('2'), makeMessage('3')] };
+          return { ok: true, status: 200, json: async () => (first ? { messages: byHas[has].map((m) => [m]), total_results: 2 } : { messages: [], total_results: 2 }) };
+        }));
+        const pages = await collect({ ...baseSearchCriteria, selectedHasTypes: ['image', 'forward'] as any });
+        expect(pages[0].messages.map((m: any) => m.id)).toEqual(['1', '2', '3']);
+        expect(pages[0].totalResults).toBe(3);
+        const hasParams = calls.map((u) => new URL(u).searchParams.getAll('has'));
+        expect(hasParams.every((h) => h.length === 1)).toBe(true);
+        expect(hasParams.slice(0, 2)).toEqual([['image'], ['forward']]);
       });
 
       it('treats a single term (or blank terms) as the plain single-term search', async () => {

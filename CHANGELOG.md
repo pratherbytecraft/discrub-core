@@ -21,6 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   so a run of sub second 429s takes at least 15 s to reach `maxConsecutive`
   and only a real storm stops the operation. A longer `retry_after` is still
   honored. `RateLimitInfo.floored` says when the floor applied.
+- Several `has` types in one search are searched one type at a time and merged,
+  the way several content terms already are (`searchVariants`), because Discord
+  requires every `has` value on the same message, so Images + Forwards found
+  almost nothing. Applies to `fetchSearchMessageData` and `iterateSearchResults`.
 
 ## [1.0.15] - 2026-10-18
 

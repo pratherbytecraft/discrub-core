@@ -21,7 +21,7 @@ import {
   ThreadModify,
   User,
 } from "../types/discord-types.ts";
-import { QueryStringParam, ReactionType } from "../enum/discord-enum.ts";
+import { HasType, QueryStringParam, ReactionType } from "../enum/discord-enum.ts";
 import { DiscrubSetting } from "../enum/discrub-enum.ts";
 import { wait } from "../utils/common-utils.ts";
 import { SettingsHelper } from "../utils/settings-utils.ts";
@@ -203,6 +203,31 @@ interface DiscordServiceOptions {
    */
   autoDelay?: boolean;
 }
+
+/**
+ * The searches one criteria set stands for. Discord's `content` param
+ * takes one term (#244) and several `has` values must all be on the same
+ * message (has-or), so each term is paired with each has type and every
+ * pair is searched on its own; the caller merges them. One entry when
+ * there is nothing to split. Blank terms are dropped.
+ */
+export const searchVariants = (criteria: SearchCriteria): SearchCriteria[] => {
+  const terms = (criteria.searchMessageContents ?? []).filter((t) => t.trim().length > 0);
+  const hasTypes = criteria.selectedHasTypes ?? [];
+  const termList: Array<string | undefined> = terms.length > 0 ? terms : [undefined];
+  const hasList: Array<HasType | undefined> = hasTypes.length > 0 ? hasTypes : [undefined];
+  const variants: SearchCriteria[] = [];
+  for (const term of termList) {
+    for (const has of hasList) {
+      variants.push({
+        ...criteria,
+        searchMessageContents: term === undefined ? [] : [term],
+        selectedHasTypes: has === undefined ? [] : [has],
+      });
+    }
+  }
+  return variants;
+};
 
 class DiscordService {
   searchDelaySecs = 0;
@@ -716,37 +741,30 @@ class DiscordService {
     guildId: string | null,
     searchCriteria: SearchCriteria,
   ): Promise<DiscordApiResponse<SearchMessageResult>> => {
-    const terms = (searchCriteria.searchMessageContents ?? []).filter(
-      (t) => t.trim().length > 0,
-    );
-    if (terms.length <= 1) {
+    const variants = searchVariants(searchCriteria);
+    if (variants.length === 1) {
       return this.get<SearchMessageResult>(
-        this._getSearchPath(guildId, channelId, offset, {
-          ...searchCriteria,
-          searchMessageContents: terms,
-        }),
+        this._getSearchPath(guildId, channelId, offset, variants[0]),
         authorization,
         "search",
       );
     }
-    // Multi-term OR (#244) for single-page callers (initial search, offset
-    // paging, thread search, package preflight): one request per term at
-    // the same offset, merged into one page and deduped by message id.
-    // `total_results` is the sum of the per-term totals (an upper bound;
-    // the cap-shift iterator refines it as duplicates surface). A 202
-    // (not yet indexed) or a failure on any term is returned as-is so the
-    // caller's retry/error handling runs unchanged.
+    // Multi-term OR (#244) and multi-has OR (has-or) for single-page
+    // callers (initial search, offset paging, thread search, package
+    // preflight): one request per variant at the same offset, merged into
+    // one page and deduped by message id. `total_results` is the sum of
+    // the per-variant totals (an upper bound; the cap-shift iterator
+    // refines it as duplicates surface). A 202 (not yet indexed) or a
+    // failure on any variant is returned as-is so the caller's retry/error
+    // handling runs unchanged.
     const seen = new Set<string>();
     const merged: Message[] = [];
     let total = 0;
     let stillIndexing = false;
     let last: DiscordApiResponse<SearchMessageResult> | null = null;
-    for (const term of terms) {
+    for (const variant of variants) {
       const response = await this.get<SearchMessageResult>(
-        this._getSearchPath(guildId, channelId, offset, {
-          ...searchCriteria,
-          searchMessageContents: [term],
-        }),
+        this._getSearchPath(guildId, channelId, offset, variant),
         authorization,
         "search",
       );
@@ -819,19 +837,16 @@ class DiscordService {
     this: DiscordService,
     options: SearchIterationOptions,
   ): AsyncGenerator<SearchIterationPage, void, void> {
-    const terms = (options.criteria.searchMessageContents ?? []).filter(
-      (t) => t.trim().length > 0,
-    );
-    if (terms.length <= 1) {
-      yield* this._iterateSingleTermSearch({
-        ...options,
-        criteria: { ...options.criteria, searchMessageContents: terms },
-      });
+    const variants = searchVariants(options.criteria);
+    if (variants.length === 1) {
+      yield* this._iterateSingleTermSearch({ ...options, criteria: variants[0] });
       return;
     }
 
-    // Multi-term OR (#244): Discord's `content` param takes a single
-    // term, so each term gets its own full cap-shifted search. Callers
+    // Multi-term OR (#244) and multi-has OR (has-or): Discord's `content`
+    // param takes a single term, and several `has` values must all be on
+    // the same message (Images + Forwards found almost nothing), so each
+    // term and has combination gets its own full cap-shifted search. Callers
     // that show a first page and stop until "Load All" (the message feed)
     // must see every term on that first page, so the first page of EVERY
     // term is fetched up front and yielded as one merged page; the
@@ -846,7 +861,7 @@ class DiscordService {
     let pageIndex = 0;
     let aggregatedCount = 0;
     let duplicates = 0;
-    const termTotals: number[] = terms.map(() => 0);
+    const termTotals: number[] = variants.map(() => 0);
     const totalSoFar = () =>
       Math.max(aggregatedCount, termTotals.reduce((sum, t) => sum + t, 0) - duplicates);
     const dedupe = (messages: Message[]): Message[] => {
@@ -867,11 +882,8 @@ class DiscordService {
       return false;
     };
 
-    const inners = terms.map((term) =>
-      this._iterateSingleTermSearch({
-        ...options,
-        criteria: { ...options.criteria, searchMessageContents: [term] },
-      }),
+    const inners = variants.map((criteria) =>
+      this._iterateSingleTermSearch({ ...options, criteria }),
     );
 
     // Phase 1: first page of every term, merged into a single yield.

@@ -44,6 +44,8 @@ export interface RateLimitInfo {
   consecutive: number;
   /** True when retryAfter exceeded `maxWaitSecs` and the request was abandoned. */
   capped: boolean;
+  /** True when the wait was raised to the floor for this consecutive 429 (#279). */
+  floored?: boolean;
 }
 
 export interface RateLimitOptions {
@@ -53,12 +55,28 @@ export interface RateLimitOptions {
   maxConsecutive?: number;
   /** Wait used when a 429 carries neither a JSON retry_after nor a Retry-After header. Default 5 s. */
   defaultWaitSecs?: number;
+  /**
+   * Shortest wait for the n-th consecutive 429 on one request (index
+   * consecutive - 1, the last entry repeats). Discord's own retry_after is
+   * honored when it is longer. Default 1, 2, 4, 8, 16 s, so a run of sub
+   * second 429s takes at least 15 s to reach `maxConsecutive` and only a
+   * real storm stops the operation (#279). An empty list is no floor.
+   */
+  waitFloorSecs?: number[];
 }
 
 export const RATE_LIMIT_DEFAULTS: Required<RateLimitOptions> = {
   maxWaitSecs: 60,
   maxConsecutive: 5,
   defaultWaitSecs: 5,
+  waitFloorSecs: [1, 2, 4, 8, 16],
+};
+
+/** The floor for the n-th consecutive 429 (1 based) under `options`, 0 without one. */
+export const rateLimitWaitFloor = (options: Required<RateLimitOptions>, consecutive: number): number => {
+  const floors = options.waitFloorSecs ?? [];
+  if (floors.length === 0) return 0;
+  return floors[Math.min(consecutive, floors.length) - 1] ?? 0;
 };
 
 /**
@@ -312,13 +330,18 @@ class DiscordService {
           const parsed = await parseRateLimit(response, this.rateLimit.defaultWaitSecs);
           const capped = parsed.retryAfter > this.rateLimit.maxWaitSecs;
           const exhausted = consecutive429 >= this.rateLimit.maxConsecutive;
+          // #279: a 429 that asks for less than the floor for this many in
+          // a row waits the floor instead, so sub second 429s back off.
+          const floor = rateLimitWaitFloor(this.rateLimit, consecutive429);
+          const floored = !capped && parsed.retryAfter < floor;
           const info: RateLimitInfo = {
-            retryAfter: capped ? this.rateLimit.maxWaitSecs : parsed.retryAfter,
+            retryAfter: capped ? this.rateLimit.maxWaitSecs : floored ? floor : parsed.retryAfter,
             global: parsed.global,
             scope: parsed.scope,
             source: parsed.source,
             consecutive: consecutive429,
             capped,
+            floored,
           };
           // Every 429 extends the shared cooldown so nothing else fires
           // into the same window.

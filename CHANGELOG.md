@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   date in the reader's locale (`.timestamp-mention`, full date in the title; the
   relative style renders the same absolute date) and subtext lines (`-# text`) as
   `.subtext`. `MessageRegex.TIMESTAMP` and `MessageRegex.SUBTEXT` are new.
+- `withRetry` floors the wait for the n-th consecutive 429 on one request at
+  1, 2, 4, 8 and 16 s (`RateLimitOptions.waitFloorSecs`, `rateLimitWaitFloor`),
+  so a run of sub second 429s takes at least 15 s to reach `maxConsecutive`
+  and only a real storm stops the operation. A longer `retry_after` is still
+  honored. `RateLimitInfo.floored` says when the floor applied.
 
 ## [1.0.15] - 2026-10-18
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { DiscordService, resetRateLimitState, getRateLimitCooldownMs, setRateLimitListener, RATE_LIMIT_DEFAULTS, RATE_LIMIT_WAIT_NOTICE_MS, NETWORK_FAILURE_STREAK_THRESHOLD } from './discord-service.ts';
+import { DiscordService, resetRateLimitState, getRateLimitCooldownMs, setRateLimitListener, RATE_LIMIT_DEFAULTS, RATE_LIMIT_WAIT_NOTICE_MS, NETWORK_FAILURE_STREAK_THRESHOLD, rateLimitWaitFloor } from './discord-service.ts';
 import { setSleepImplementation } from '../utils/common-utils.ts';
 import {
   mockUser,
@@ -264,6 +264,11 @@ describe('DiscordService', () => {
   });
 
   describe('Rate Limiting (429 Handling)', () => {
+    // These run without the #279 wait floor so short real waits keep them fast.
+    beforeEach(() => {
+      service = new DiscordService(undefined, { rateLimit: { waitFloorSecs: [] } });
+    });
+
     it('should retry after rate limit with retry_after value', async () => {
       const retryAfter = 0.1; // 100ms for fast testing
       let callCount = 0;
@@ -455,7 +460,7 @@ describe('DiscordService', () => {
     });
 
     it('honors per-instance rateLimit options', async () => {
-      const tuned = new DiscordService(undefined, { rateLimit: { maxConsecutive: 2, defaultWaitSecs: 0.5 } });
+      const tuned = new DiscordService(undefined, { rateLimit: { maxConsecutive: 2, defaultWaitSecs: 0.5, waitFloorSecs: [] } });
       const mockFetch = vi.fn().mockResolvedValue(mockHtmlRateLimitResponse(null));
       vi.stubGlobal('fetch', mockFetch);
       const onRateLimit = vi.fn();
@@ -466,6 +471,42 @@ describe('DiscordService', () => {
       expect(result.rateLimited).toBe(true);
       expect(mockFetch).toHaveBeenCalledTimes(2);
       expect(onRateLimit).toHaveBeenCalledWith(0.5, expect.anything());
+    });
+
+    it('floors each consecutive 429 wait at 1, 2, 4, 8, 16 s and honors a longer retry_after (#279)', async () => {
+      expect(RATE_LIMIT_DEFAULTS.waitFloorSecs).toEqual([1, 2, 4, 8, 16]);
+      expect(rateLimitWaitFloor(RATE_LIMIT_DEFAULTS, 7)).toBe(16);
+      expect(rateLimitWaitFloor({ ...RATE_LIMIT_DEFAULTS, waitFloorSecs: [] }, 3)).toBe(0);
+      const mockFetch = vi.fn()
+        .mockResolvedValueOnce(mockRateLimitResponse(0.05))
+        .mockResolvedValueOnce(mockRateLimitResponse(0.05))
+        .mockResolvedValueOnce(mockRateLimitResponse(6))
+        .mockResolvedValueOnce(mockSuccessResponse(mockUser));
+      vi.stubGlobal('fetch', mockFetch);
+      const onRateLimit = vi.fn();
+      service.onRateLimit = onRateLimit;
+
+      const result = await service.getUser(testAuth, testUserId);
+
+      expect(result.success).toBe(true);
+      expect(onRateLimit.mock.calls.map((c) => c[0])).toEqual([1, 2, 6]);
+      expect(onRateLimit).toHaveBeenNthCalledWith(1, 1, expect.objectContaining({ consecutive: 1, floored: true }));
+      expect(onRateLimit).toHaveBeenNthCalledWith(3, 6, expect.objectContaining({ consecutive: 3, floored: false }));
+      expect(sleeps).toEqual(expect.arrayContaining([1000, 2000, 6000]));
+    });
+
+    it('a run of sub second 429s waits at least 15 s before the storm stop (#279)', async () => {
+      const mockFetch = vi.fn().mockResolvedValue(mockRateLimitResponse(0.2));
+      vi.stubGlobal('fetch', mockFetch);
+      const onExceeded = vi.fn();
+      service.onRateLimitExceeded = onExceeded;
+
+      const result = await service.getUser(testAuth, testUserId);
+
+      expect(result.rateLimited).toBe(true);
+      expect(mockFetch).toHaveBeenCalledTimes(RATE_LIMIT_DEFAULTS.maxConsecutive);
+      expect(sleeps.reduce((a, b) => a + b, 0)).toBeGreaterThanOrEqual(15000);
+      expect(onExceeded).toHaveBeenCalledWith(expect.objectContaining({ consecutive: 5, retryAfter: 16 }));
     });
 
     it('makes an unrelated request wait out the shared cooldown, across instances', async () => {

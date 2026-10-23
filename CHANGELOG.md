@@ -5,6 +5,22 @@ All notable changes to `discrub-core` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.17] - Unreleased
+
+### Added
+
+- `formatMentionsAsHtml(content, context)`: user and channel mentions and custom
+  emoji resolve, everything else is escaped, no markdown. It is what Discord does
+  with an embed's title, author name and footer text, and with the one line of
+  a reply preview.
+
+### Fixed
+
+- `renderEmbedAsHtml` with a `formattingContext` resolves mentions in the embed
+  title, author name and footer text through `formatMentionsAsHtml`. A bot's
+  `<#id>` in a title stayed raw in the export. Without a context they stay
+  escaped text as before.
+
 ## [1.0.16] - 2026-10-22
 
 ### Added

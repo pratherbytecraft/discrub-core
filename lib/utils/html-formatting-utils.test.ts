@@ -13,6 +13,7 @@ import {
   renderLinkHtml,
   formatContentAsHtml,
   renderEmbedAsHtml,
+  formatMentionsAsHtml,
   renderTimestampHtml,
 } from './html-formatting-utils.ts';
 import type { Embed } from '../types/discord-types.ts';
@@ -541,6 +542,34 @@ describe('html-formatting-utils', () => {
       expect(result).toMatch(/<span class="subtext"><span class="channel-mention"[^]*?<\/span> · by <span class="user-mention"[^]*?<\/span> · <span class="timestamp-mention"[^]*?<\/span><\/span>/);
     });
 
+    it('resolves mentions in the title, author name and footer text without rendering markdown there (1.0.17)', () => {
+      const embed: Embed = {
+        type: EmbedType.RICH,
+        title: '**Top posters** in <#345>',
+        url: 'https://example.com',
+        author: { name: 'Stats for <@1541>' },
+        footer: { text: 'Asked by <@1541> <:wave:777>' },
+      };
+
+      const result = renderEmbedAsHtml(embed, {
+        formattingContext: {
+          userMap: { '1541': { displayName: 'Prather Bytecraft' } },
+          channelMap: { '345': { name: 'general' } },
+        },
+      });
+
+      expect(result).toContain('<div class="embed-title"><a href="https://example.com" target="_blank" rel="noopener noreferrer">**Top posters** in <span class="channel-mention" data-channel-id="345"># general</span></a></div>');
+      expect(result).toContain('<span class="embed-author-name">Stats for <span class="user-mention" data-user-id="1541">@Prather Bytecraft</span></span>');
+      expect(result).toContain('<span class="embed-footer-text">Asked by <span class="user-mention" data-user-id="1541">@Prather Bytecraft</span> <img class="emoji" src="https://cdn.discordapp.com/emojis/777.webp" alt=":wave:" title=":wave:"></span>');
+      expect(result).not.toContain('<strong>');
+      expect(result).not.toContain('&lt;#345&gt;');
+    });
+
+    it('keeps the title as escaped text without a formatting context', () => {
+      const result = renderEmbedAsHtml({ type: EmbedType.RICH, title: 'In <#345> <b>x</b>' });
+      expect(result).toContain('<div class="embed-title">In &lt;#345&gt; &lt;b&gt;x&lt;/b&gt;</div>');
+    });
+
     it('keeps the description as escaped text without a formatting context', () => {
       const embed: Embed = {
         type: EmbedType.RICH,
@@ -919,5 +948,20 @@ describe('html-formatting-utils', () => {
       expect(result).toContain('<video');
       expect(result).toContain('src="media/embed-videos/1_1.mp4"');
     });
+  });
+});
+
+describe('formatMentionsAsHtml (1.0.17)', () => {
+  const context = { userMap: { '1541': { displayName: 'Prather Bytecraft' } }, channelMap: { '345': { name: 'general' } } };
+
+  it('resolves users, channels and custom emoji, escapes everything else, and leaves markdown alone', () => {
+    expect(formatMentionsAsHtml('**Hi** <@1541> in <#345> <a:party:9> & <b>', context)).toBe(
+      '**Hi** <span class="user-mention" data-user-id="1541">@Prather Bytecraft</span> in <span class="channel-mention" data-channel-id="345"># general</span> <img class="emoji" src="https://cdn.discordapp.com/emojis/9.webp?animated=true" alt=":party:" title=":party:"> &amp; &lt;b&gt;',
+    );
+  });
+
+  it('names an unknown user and channel like the message formatter', () => {
+    expect(formatMentionsAsHtml('<@1> <#2>', context)).toBe('<span class="user-mention" data-user-id="1">@Unknown User</span> <span class="channel-mention" data-channel-id="2"># unknown-channel</span>');
+    expect(formatMentionsAsHtml('', context)).toBe('');
   });
 });

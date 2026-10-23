@@ -165,6 +165,48 @@ export const renderLinkHtml = (url: string, text: string, title?: string): strin
  * @param context Context containing userMap, channelMap, emojiMap, etc.
  * @returns Formatted HTML string
  */
+/**
+ * Mentions and custom emoji only, no markdown (1.0.17). Discord renders an
+ * embed's title, author name and footer text as plain text with `<@id>`,
+ * `<#id>` and `<:name:id>` resolved, so those strings go through
+ * this instead of `formatContentAsHtml`, which would also bold and link.
+ * Everything else is HTML-escaped.
+ */
+export const formatMentionsAsHtml = (
+  content: string,
+  context: HtmlFormattingContext
+): string => {
+  if (!content) return '';
+  const { userMap, channelMap, emojiMap, sanitizedName } = context;
+  const stash: string[] = [];
+  const stashHtml = (rendered: string): string => {
+    const key = `\x00DCPH${stash.length}\x00`;
+    stash.push(rendered);
+    return key;
+  };
+  let html = content;
+  const emojiMatches = Array.from(html.matchAll(/<(a)?:(\w+):(\d+)>/g));
+  emojiMatches.forEach(([ref, animated, name, id]) => {
+    const localPath = emojiMap?.[id];
+    const imgSrc = localPath && sanitizedName
+      ? localPath.replace(`${sanitizedName}/`, '')
+      : `https://cdn.discordapp.com/emojis/${id}.webp${animated ? '?animated=true' : ''}`;
+    html = html.replaceAll(ref, stashHtml(`<img class="emoji" src="${imgSrc}" alt=":${name}:" title=":${name}:">`));
+  });
+  Array.from(html.matchAll(MessageRegex.USER_MENTION)).forEach(({ 0: ref, groups }) => {
+    const id = groups?.user_id || '';
+    const user = userMap[id];
+    html = html.replaceAll(ref, stashHtml(renderUserMentionHtml(id, user?.displayName || user?.userName || 'Unknown User')));
+  });
+  Array.from(html.matchAll(MessageRegex.CHANNEL_MENTION)).forEach(({ 0: ref, groups }) => {
+    const id = groups?.channel_id || '';
+    html = html.replaceAll(ref, stashHtml(renderChannelMentionHtml(id, channelMap?.[id]?.name || 'unknown-channel')));
+  });
+  html = escapeHtml(html);
+  stash.forEach((rendered, i) => { html = html.replace(`\x00DCPH${i}\x00`, () => rendered); });
+  return html;
+};
+
 export const formatContentAsHtml = (
   content: string,
   context: HtmlFormattingContext
@@ -410,6 +452,10 @@ export const renderEmbedAsHtml = (
   // escaped text, the pre-1.0.16 output.
   const renderRichText = (text: string): string =>
     formattingContext ? formatContentAsHtml(text, formattingContext) : escapeHtml(text);
+  // The title, author name and footer text take mentions but no markdown
+  // (1.0.17; a `<#id>` in a bot's embed title stayed raw in the export).
+  const renderPlainText = (text: string): string =>
+    formattingContext ? formatMentionsAsHtml(text, formattingContext) : escapeHtml(text);
 
   // Rewrite a remote URL to its local path when the archive download service
   // has captured it. No map → remote URL. Map miss → remote URL (graceful
@@ -463,9 +509,9 @@ export const renderEmbedAsHtml = (
     }
     if (embed.author.name) {
       if (embed.author.url) {
-        embedHtml += `<a class="embed-author-name" href="${escapeHtml(embed.author.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(embed.author.name)}</a>`;
+        embedHtml += `<a class="embed-author-name" href="${escapeHtml(embed.author.url)}" target="_blank" rel="noopener noreferrer">${renderPlainText(embed.author.name)}</a>`;
       } else {
-        embedHtml += `<span class="embed-author-name">${escapeHtml(embed.author.name)}</span>`;
+        embedHtml += `<span class="embed-author-name">${renderPlainText(embed.author.name)}</span>`;
       }
     }
     embedHtml += '</div>';
@@ -474,9 +520,9 @@ export const renderEmbedAsHtml = (
   // Title
   if (embed.title) {
     if (embed.url) {
-      embedHtml += `<div class="embed-title"><a href="${escapeHtml(embed.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(embed.title)}</a></div>`;
+      embedHtml += `<div class="embed-title"><a href="${escapeHtml(embed.url)}" target="_blank" rel="noopener noreferrer">${renderPlainText(embed.title)}</a></div>`;
     } else {
-      embedHtml += `<div class="embed-title">${escapeHtml(embed.title)}</div>`;
+      embedHtml += `<div class="embed-title">${renderPlainText(embed.title)}</div>`;
     }
   }
 
@@ -529,7 +575,7 @@ export const renderEmbedAsHtml = (
       embedHtml += `<img class="embed-footer-icon" src="${escapeHtml(embed.footer.icon_url)}" alt="">`;
     }
     if (embed.footer?.text) {
-      embedHtml += `<span class="embed-footer-text">${escapeHtml(embed.footer.text)}</span>`;
+      embedHtml += `<span class="embed-footer-text">${renderPlainText(embed.footer.text)}</span>`;
     }
     if (embed.timestamp) {
       const timestamp = new Date(embed.timestamp).toLocaleString();

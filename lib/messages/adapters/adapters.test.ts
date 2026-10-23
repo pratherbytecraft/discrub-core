@@ -119,7 +119,7 @@ describe('Message Adapters', () => {
     });
 
     it('should handle async notify', async () => {
-      const notifyFn = vi.fn().mockImplementation(async (msg, timeout) => {
+      const notifyFn = vi.fn().mockImplementation(async () => {
         await new Promise(resolve => setTimeout(resolve, 10));
       });
       const adapter = new NotificationManagerAdapter(notifyFn);

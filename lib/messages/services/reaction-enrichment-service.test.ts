@@ -390,7 +390,7 @@ describe('ReactionEnrichmentService', () => {
       vi.spyOn(PaginationHelper.prototype, 'paginatedFetch').mockResolvedValue([createUser('user1')]);
       vi.spyOn(utils, 'getEncodedEmoji').mockReturnValue('👍');
 
-      const result = await service.generateReactionMap(messages);
+      await service.generateReactionMap(messages);
 
       expect(mockConfig.shouldStop).toHaveBeenCalled();
     });

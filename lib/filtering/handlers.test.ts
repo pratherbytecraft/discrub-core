@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { FilterHandlers } from './handlers.ts';
 import { FilterType, FilterName } from '../enum/discrub-enum.ts';
 import type { Filter } from '../types/discrub-types.ts';
-import type { Message, Channel } from '../types/discord-types.ts';
+import type { Message } from '../types/discord-types.ts';
 
 describe('FilterHandlers', () => {
   const createMsg = (

@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { PurgeService } from './purge-service.ts';
-import { MessageModificationService } from './message-modification-service.ts';
 import { ReactionModificationService } from './reaction-modification-service.ts';
 import { PurgeStatus } from '../../enum/discrub-enum.ts';
 import type { PurgeConfig } from '../types.ts';

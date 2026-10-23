@@ -9,7 +9,7 @@ export class MessageRegex {
   public static readonly ITALICS =
     /(_|\*)(?<text>[^_*]+)(?=((_|\*)(\s|$)))(_|\*)/g;
   public static readonly STRIKETHROUGH = /~~(?<text>[^~]+)(?=(~~))~~/g;
-  public static readonly SPOILER = /\|\|(?<text>[^\|]+)(?=(\|\|))\|\|/g;
+  public static readonly SPOILER = /\|\|(?<text>[^|]+)(?=(\|\|))\|\|/g;
   public static readonly CODE = /```(?<text>[^]+)(?=(```))```/g;
   public static readonly USER_MENTION = /<@(?:&|!)?(?<user_id>[0-9]+)>/g;
   public static readonly EMOJI = /<a:[^<>]+:[0-9]+>|<:[^<>]+:[0-9]+>/g;

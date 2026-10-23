@@ -34,7 +34,7 @@ const fetchGist = <T>(
       console.error(fallbackMsg, e);
       return (options?.fallbackValue !== undefined
         ? options.fallbackValue
-        : undefined) as any;
+        : undefined) as T;
     });
 };
 

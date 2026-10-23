@@ -1,9 +1,8 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { filterMessages } from './filter-messages.ts';
-import type { FilterMessagesParams } from './filter-messages.ts';
 import { FilterType, FilterName } from '../enum/discrub-enum.ts';
 import { MessageType } from '../enum/discord/message-type.ts';
-import type { Message, Channel } from '../types/discord-types.ts';
+import type { Message } from '../types/discord-types.ts';
 import type { Filter } from '../types/discrub-types.ts';
 
 describe('filterMessages', () => {

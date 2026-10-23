@@ -199,7 +199,7 @@ describe('discrub-utils', () => {
       const id = getFsUUID();
 
       // Should not contain OS-unsafe characters
-      expect(id).not.toMatch(/[<>:"\/\\|?*]/);
+      expect(id).not.toMatch(/[<>:"/\\|?*]/);
     });
   });
 

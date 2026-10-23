@@ -65,7 +65,7 @@ export class MessageFetchService {
     const channel = this.config.channelProvider?.findChannel(channelId || "");
 
     let knownMessages: Message[] = [];
-    let knownThreads: Channel[] = [];
+    const knownThreads: Channel[] = [];
     let offset = startOffset || 0;
     let isEndConditionMet = false;
     let totalMessages = 0;
@@ -158,7 +158,7 @@ export class MessageFetchService {
   private async fetchChannelMessages(channelId: string): Promise<MessageFetchResult> {
     const channel = this.config.channelProvider?.findChannel(channelId);
     const trackedThreads: Channel[] = [];
-    let messages: Message[] = [];
+    const messages: Message[] = [];
 
     if (!channel) {
       return { messages: [], threads: [] };

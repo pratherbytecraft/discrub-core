@@ -7,6 +7,8 @@ export default defineConfig({
   plugins: [
     dts({
       include: ["lib"],
+      // Declarations come from the library only; the tests have their own loose types (1.0.17).
+      exclude: ["lib/**/*.test.ts", "lib/__tests__"],
       tsconfigPath: "./tsconfig.app.json",
       rollupTypes: true,
       afterBuild: () => {

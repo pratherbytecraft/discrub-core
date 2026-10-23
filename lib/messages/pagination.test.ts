@@ -170,7 +170,7 @@ describe('PaginationHelper', () => {
         return { success: true, data: batch };
       });
 
-      const onBatch = vi.fn(async (items: TestItem[]) => {
+      const onBatch = vi.fn(async (_items: TestItem[]) => {
         await new Promise(resolve => setTimeout(resolve, 10));
         return;
       });

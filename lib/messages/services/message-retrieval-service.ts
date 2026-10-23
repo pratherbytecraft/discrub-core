@@ -26,7 +26,7 @@ export class MessageRetrievalService {
     channelId: string | null,
     options: MessageRetrievalOptions = {},
   ): Promise<MessageRetrievalResult> {
-    let result: MessageRetrievalResult = {
+    const result: MessageRetrievalResult = {
       messages: [],
       threads: [],
       userMap: this.config.existingUserMap || {},

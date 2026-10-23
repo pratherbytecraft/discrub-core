@@ -7,11 +7,11 @@ export class ModificationProgressManagerAdapter
   implements IModificationProgressManager
 {
   private setIsModifyingFn: (isModifying: boolean) => void;
-  private setModifyEntityFn: (entity: any) => void;
+  private setModifyEntityFn: (entity: unknown) => void;
 
   constructor(
     setIsModifyingFn: (isModifying: boolean) => void,
-    setModifyEntityFn: (entity: any) => void,
+    setModifyEntityFn: (entity: unknown) => void,
   ) {
     this.setIsModifyingFn = setIsModifyingFn;
     this.setModifyEntityFn = setModifyEntityFn;
@@ -21,7 +21,7 @@ export class ModificationProgressManagerAdapter
     this.setIsModifyingFn(isModifying);
   }
 
-  setModifyEntity(entity: any): void {
+  setModifyEntity(entity: unknown): void {
     this.setModifyEntityFn(entity);
   }
 
@@ -30,7 +30,7 @@ export class ModificationProgressManagerAdapter
    */
   static fromReduxDispatch(
     setIsModifyingDispatch: (isModifying: boolean) => void,
-    setModifyEntityDispatch: (entity: any) => void,
+    setModifyEntityDispatch: (entity: unknown) => void,
   ): ModificationProgressManagerAdapter {
     return new ModificationProgressManagerAdapter(
       setIsModifyingDispatch,

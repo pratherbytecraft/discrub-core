@@ -16,7 +16,7 @@ import {
 import { IsPinnedType } from '../enum/discord-enum.ts';
 import type { SearchCriteria } from '../types/discrub-types.ts';
 import type { Message, Channel } from '../types/discord-types.ts';
-import { MessageCategory, MessageType } from '../enum/discord-enum.ts';
+import { MessageCategory } from '../enum/discord-enum.ts';
 
 describe('filtering/helpers', () => {
   const createMsg = (

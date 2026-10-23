@@ -168,7 +168,7 @@ export interface INotificationManager {
 
 export interface IModificationProgressManager {
   setIsModifying(isModifying: boolean): void;
-  setModifyEntity(entity: any): void;
+  setModifyEntity(entity: unknown): void;
 }
 
 // ============================================================================

@@ -104,7 +104,7 @@ export const MapUtils = {
    * @returns A new map without the specified key
    */
   remove: <T>(map: Record<string, T>, key: string): Record<string, T> => {
-    const { [key]: _, ...rest } = map;
+    const { [key]: _removed, ...rest } = map;
     return rest;
   },
 
@@ -121,7 +121,7 @@ export const MapUtils = {
     key2: string,
   ): Record<string, Record<string, T>> => {
     if (!map[key1]) return map;
-    const { [key2]: _, ...rest } = map[key1];
+    const { [key2]: _removed, ...rest } = map[key1];
     return {
       ...map,
       [key1]: rest,

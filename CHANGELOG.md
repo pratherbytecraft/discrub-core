@@ -5,7 +5,7 @@ All notable changes to `discrub-core` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.17] - Unreleased
+## [1.0.17] - 2026-10-27
 
 ### Added
 
@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `iterateSearchResults` stops when a cap-shifted page carries only messages the
+  previous page already had, instead of yielding the boundary message again
+  forever. A server that treats `max_id` as inclusive used to keep a zero-delay
+  purge or edit on one message without end.
 - `renderEmbedAsHtml` with a `formattingContext` resolves mentions in the embed
   title, author name and footer text through `formatMentionsAsHtml`. A bot's
   `<#id>` in a title stayed raw in the export. Without a context they stay

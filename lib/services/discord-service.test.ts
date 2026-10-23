@@ -17,8 +17,6 @@ import {
 import {
   mockFetchSuccess,
   mockFetchError,
-  mockFetchRateLimit,
-  wait,
   clearAllMocks,
 } from '../__tests__/test-utils.ts';
 import { AppSettings, SearchCriteria } from '../types/discrub-types.ts';
@@ -1623,7 +1621,7 @@ describe('DiscordService', () => {
       vi.stubGlobal('fetch', mockFetchError(401));
 
       const run = async () => {
-        for await (const _ of service.iterateSearchResults({
+        for await (const _page of service.iterateSearchResults({
           token: testAuth,
           channelId: testChannelId,
           guildId: testGuildId,
@@ -1893,6 +1891,36 @@ describe('DiscordService', () => {
       expect(pages[0].messages).toHaveLength(3);
       // Iterator continued past the data page to the empty terminator.
       expect(callCount).toBeGreaterThanOrEqual(3);
+    });
+
+    it('ends when a page moves the window nowhere, instead of re-yielding the boundary message forever (1.0.17)', async () => {
+      // A server that treats max_id as inclusive answers the oldest
+      // message again on every cap-shifted call. Page 1 yields three
+      // messages; page 2 and every later call would carry only the
+      // oldest one again. The iterator yields page 1, sees page 2 bring
+      // nothing older, and stops after that second call.
+      const stale = makeMessage('100', '2025-06-01T00:00:00.000Z');
+      let callCount = 0;
+      vi.stubGlobal('fetch', vi.fn(async () => {
+        callCount++;
+        const msgs = callCount === 1
+          ? [makeMessage('300', '2025-06-03T00:00:00.000Z'), makeMessage('200', '2025-06-02T00:00:00.000Z'), stale]
+          : [stale];
+        return { ok: true, status: 200, json: async () => ({ messages: msgs.map((m) => [m]), total_results: 3 }) };
+      }));
+
+      const yielded: string[] = [];
+      for await (const page of service.iterateSearchResults({
+        token: testAuth,
+        channelId: testChannelId,
+        guildId: testGuildId,
+        criteria: baseSearchCriteria,
+      })) {
+        for (const m of page.messages) yielded.push(m.id);
+      }
+
+      expect(yielded).toEqual(['300', '200', '100']);
+      expect(callCount).toBe(2);
     });
 
     it('consecutive-empty counter resets on a non-empty page (no premature termination)', async () => {

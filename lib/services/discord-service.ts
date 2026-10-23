@@ -968,6 +968,7 @@ class DiscordService {
     // `pendingReset`, `consecutiveEmptyPages`, `wastedResets`,
     // `prevTotalResults`) into one boundary advance per page.
     let oldestSeenTimestamp: Date | null = null;
+    let previousPageIds = new Set<string>();
 
     // User-supplied lower bound (snowflake form) for the cap-shift
     // guard. We tighten the upper bound (max_id) every iteration; if
@@ -1050,6 +1051,22 @@ class DiscordService {
       const flatMessages = Array.isArray(rawMessages[0])
         ? (rawMessages as unknown as Message[][]).flat()
         : (rawMessages as Message[]);
+
+      // No-progress guard (1.0.17). Every page after the first sits under
+      // an exclusive max_id at the oldest timestamp yielded so far, so a
+      // page made only of messages the previous page already carried can
+      // only be the boundary served again (a server that treats max_id as
+      // inclusive, or an index answering the same hit). Yielding it again
+      // would edit or delete the same message forever at zero delay;
+      // treat the window as exhausted instead. Found on the mock Discord,
+      // 2026-10-27. Only the previous page's ids are kept, so a walk over
+      // a million messages holds no more than one page of them.
+      if (previousPageIds.size > 0 && flatMessages.length > 0 && flatMessages.every((m) => previousPageIds.has(m.id))) {
+        lastTotalResults = searchResult.total_results ?? lastTotalResults;
+        yield* maybeYieldIncomplete();
+        return;
+      }
+      previousPageIds = new Set(flatMessages.map((m) => m.id));
 
       // Track oldest timestamp for the next iteration's cap-shift.
       for (const m of flatMessages) {

@@ -37,12 +37,19 @@ export type TextAttachmentStyle = "inline" | "sidecar" | "skip";
 export type TextReactionsStyle = "include" | "skip";
 export type TextRepliesStyle = "quote" | "link" | "skip";
 export type TextBotIndicatorStyle = "include" | "skip";
+/** Whether the author line carries the sent (and edited) time. */
+export type TextTimestampsStyle = "include" | "skip";
 
 export interface TextFormatOptions {
   attachmentStyle: TextAttachmentStyle;
   reactions: TextReactionsStyle;
   replies: TextRepliesStyle;
   botIndicator: TextBotIndicatorStyle;
+  /**
+   * Absent on options saved before this field existed, which reads as
+   * "include".
+   */
+  timestamps?: TextTimestampsStyle;
 }
 
 export const defaultTextFormatOptions: TextFormatOptions = {
@@ -50,4 +57,5 @@ export const defaultTextFormatOptions: TextFormatOptions = {
   reactions: "include",
   replies: "quote",
   botIndicator: "include",
+  timestamps: "include",
 };

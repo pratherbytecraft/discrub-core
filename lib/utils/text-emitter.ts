@@ -90,6 +90,7 @@ function buildAuthorLine(
   const author = resolveAuthorName(message, cachedUserMap, guildId);
   const botSuffix =
     options.botIndicator === "include" && isBotAuthor(message) ? " [BOT]" : "";
+  if (options.timestamps === "skip") return `@${author}${botSuffix}`;
   const created = formatTimestamp(message.timestamp, exportConfig);
   const edited = formatTimestamp(message.edited_timestamp, exportConfig);
   const editedSuffix = edited ? `, edited ${edited}` : "";
@@ -174,10 +175,14 @@ function buildSystemBlock(
   cachedUserMap: ExportUserMap,
   guildId: string | null,
   exportConfig: ExportConfig | undefined,
+  options: TextFormatOptions,
 ): string {
   const author = resolveAuthorName(message, cachedUserMap, guildId);
   const content = singleLine(getMessageContent(message)) || "system event";
-  const ts = formatTimestamp(message.timestamp, exportConfig);
+  const ts =
+    options.timestamps === "skip"
+      ? null
+      : formatTimestamp(message.timestamp, exportConfig);
   const tsPart = ts ? ` (${ts})` : "";
   return `-- @${author}: ${content}${tsPart} --`;
 }
@@ -197,7 +202,7 @@ export function buildTextMessageBlock(
   options: TextFormatOptions,
 ): string[] {
   if (isSystemMessage(message)) {
-    return [buildSystemBlock(message, cachedUserMap, guildId, exportConfig)];
+    return [buildSystemBlock(message, cachedUserMap, guildId, exportConfig, options)];
   }
 
   const lines: string[] = [];

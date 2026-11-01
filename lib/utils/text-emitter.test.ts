@@ -152,6 +152,58 @@ describe('textEmitter', () => {
     });
   });
 
+  describe('timestamps', () => {
+    it('drops the time from the author line when timestamps === "skip"', () => {
+      const lines = buildTextMessageBlock(
+        makeMessage({ content: 'Hello', edited_timestamp: '2026-01-02T04:00:00Z' }),
+        cachedUserMap,
+        null,
+        exportConfig,
+        null,
+        { ...defaultTextFormatOptions, timestamps: 'skip' },
+      );
+      expect(lines[0]).toBe('@Alice');
+      expect(lines[1]).toBe('Hello');
+    });
+
+    it('keeps the bot tag without the time', () => {
+      const lines = buildTextMessageBlock(
+        makeMessage({ author: botAuthor, content: 'beep' }),
+        cachedUserMap,
+        null,
+        exportConfig,
+        null,
+        { ...defaultTextFormatOptions, timestamps: 'skip' },
+      );
+      expect(lines[0]).toBe('@Helper [BOT]');
+    });
+
+    it('drops the time from a system line when timestamps === "skip"', () => {
+      const lines = buildTextMessageBlock(
+        makeMessage({ type: 7, content: '' }),
+        cachedUserMap,
+        null,
+        exportConfig,
+        null,
+        { ...defaultTextFormatOptions, timestamps: 'skip' },
+      );
+      expect(lines[0]).toBe('-- @Alice: system event --');
+    });
+
+    it('reads options saved without the field as include', () => {
+      const { timestamps: _omit, ...older } = defaultTextFormatOptions;
+      const lines = buildTextMessageBlock(
+        makeMessage({ content: 'Hello' }),
+        cachedUserMap,
+        null,
+        exportConfig,
+        null,
+        older as TextFormatOptions,
+      );
+      expect(lines[0]).toMatch(/^@Alice \(/);
+    });
+  });
+
   describe('replies', () => {
     const referenced = makeMessage({
       id: 'r1',

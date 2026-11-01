@@ -5,6 +5,14 @@ All notable changes to `discrub-core` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.18] - 2026-11-01
+
+### Added
+
+- `TextFormatOptions.timestamps` (`"include"` or `"skip"`): the plain text
+  emitter leaves the sent and edited time off the author line and off system
+  lines when it is `"skip"`. Options saved without the field read as `"include"`.
+
 ## [1.0.17] - 2026-10-27
 
 ### Added

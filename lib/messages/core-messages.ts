@@ -25,6 +25,23 @@ export interface CoreMessages {
   noPermissionToModifyMessage: () => string;
   noPermissionToModifyLocation: () => string;
   unableToRemoveReaction: (user: string) => string;
+  // 1.0.20: the words the plain text export writes around a message, and the
+  // stand-in name for a user nothing is known about.
+  unknownUser: () => string;
+  textUnknownAuthor: () => string;
+  /** The tag after a bot's name, without the leading space. */
+  textBotTag: () => string;
+  /** The part after the sent time, without the leading comma and space. */
+  textEdited: (time: string) => string;
+  textReplyUnavailable: () => string;
+  textReplyTo: (author: string) => string;
+  textReplyNoContent: () => string;
+  /** The stand-in file name for an attachment that has none. */
+  textAttachmentName: () => string;
+  textAttachment: (filename: string, target: string) => string;
+  textReactions: (list: string) => string;
+  textSystemEvent: () => string;
+  textForwarded: () => string;
 }
 
 export const DEFAULT_CORE_MESSAGES: CoreMessages = {
@@ -49,6 +66,18 @@ export const DEFAULT_CORE_MESSAGES: CoreMessages = {
   noPermissionToModifyLocation: () =>
     "You do not have permission to modify content in this location, skipping",
   unableToRemoveReaction: (user) => `Unable to remove reaction from ${user}`,
+  unknownUser: () => "Unknown User",
+  textUnknownAuthor: () => "Unknown",
+  textBotTag: () => "[BOT]",
+  textEdited: (time) => `edited ${time}`,
+  textReplyUnavailable: () => "(referenced message unavailable)",
+  textReplyTo: (author) => `reply to @${author}`,
+  textReplyNoContent: () => "(no content)",
+  textAttachmentName: () => "attachment",
+  textAttachment: (filename, target) => `[Attachment: ${filename} \u2014 ${target}]`,
+  textReactions: (list) => `Reactions: ${list}`,
+  textSystemEvent: () => "system event",
+  textForwarded: () => "[Forwarded]",
 };
 
 let current: CoreMessages = { ...DEFAULT_CORE_MESSAGES };

@@ -1,3 +1,4 @@
+import { coreMessages } from "../messages/core-messages.ts";
 import hljs from 'highlight.js';
 import { MessageRegex } from '../regex/index.ts';
 import { parseSpecialFormatting } from './message-formatting-utils.ts';
@@ -196,7 +197,7 @@ export const formatMentionsAsHtml = (
   Array.from(html.matchAll(MessageRegex.USER_MENTION)).forEach(({ 0: ref, groups }) => {
     const id = groups?.user_id || '';
     const user = userMap[id];
-    html = html.replaceAll(ref, stashHtml(renderUserMentionHtml(id, user?.displayName || user?.userName || 'Unknown User')));
+    html = html.replaceAll(ref, stashHtml(renderUserMentionHtml(id, user?.displayName || user?.userName || coreMessages().unknownUser())));
   });
   Array.from(html.matchAll(MessageRegex.CHANNEL_MENTION)).forEach(({ 0: ref, groups }) => {
     const id = groups?.channel_id || '';
@@ -279,7 +280,7 @@ export const formatContentAsHtml = (
   userMentionMatches.forEach(({ 0: ref, groups }) => {
     const id = groups?.user_id || '';
     const user = userMap[id];
-    const displayName = user?.displayName || user?.userName || 'Unknown User';
+    const displayName = user?.displayName || user?.userName || coreMessages().unknownUser();
     html = html.replaceAll(ref, stashHtml(renderUserMentionHtml(id, displayName)));
   });
 

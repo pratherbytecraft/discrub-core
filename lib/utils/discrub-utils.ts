@@ -1,3 +1,4 @@
+import { coreMessages } from "../messages/core-messages.ts";
 import filenamify from "filenamify";
 import { nanoid } from "nanoid";
 import {
@@ -813,7 +814,7 @@ export const createPreFilterUsers = (
   const preFilterUsers = Object.keys(userMap)
     .map((key) => {
       const mapping = userMap[key];
-      return { name: mapping.userName || "Unknown User", id: key };
+      return { name: mapping.userName || coreMessages().unknownUser(), id: key };
     })
     .filter(
       (mapping) =>

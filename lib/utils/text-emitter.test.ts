@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
+import { resetCoreMessages, setCoreMessages } from '../messages/core-messages.ts';
 import type { Message } from '../types/discord-types.ts';
 import {
   buildTextMessageBlock,
@@ -728,5 +729,53 @@ describe('textEmitter', () => {
       );
       expect(lines[0]).not.toContain('edited');
     });
+  });
+});
+
+describe('textEmitter wording comes from the message catalog (1.0.20)', () => {
+  afterEach(() => resetCoreMessages());
+
+  it('uses a host app\'s replacements for the bot tag, the edited note, attachments and reactions', () => {
+    setCoreMessages({
+      textBotTag: () => '[ROBOT]',
+      textEdited: (time) => `changed ${time}`,
+      textAttachment: (filename, target) => `<file ${filename} at ${target}>`,
+      textReactions: (list) => `Reacts = ${list}`,
+      textForwarded: () => '<fwd>',
+      textSystemEvent: () => 'sys',
+      textUnknownAuthor: () => 'Nobody',
+    });
+    const block = buildTextMessageBlock(
+      makeMessage({
+        author: botAuthor,
+        content: 'hello',
+        edited_timestamp: '2024-01-02T03:04:05.000Z',
+        attachments: [{ id: 'a1', filename: 'pic.png', url: 'https://cdn.example/pic.png' }] as any,
+        reactions: [{ emoji: { id: null, name: 'fire' }, count: 2 }] as any,
+      }),
+      {},
+      null,
+      undefined,
+      null,
+      { ...defaultTextFormatOptions, botIndicator: 'include' } as TextFormatOptions,
+    ).join('\n');
+    expect(block).toContain('[ROBOT]');
+    expect(block).toContain('changed ');
+    expect(block).toContain('<file pic.png at https://cdn.example/pic.png>');
+    expect(block).toContain('Reacts = ');
+    expect(block).not.toContain('[BOT]');
+    expect(block).not.toContain('[Attachment:');
+  });
+
+  it('keeps the English wording by default', () => {
+    const block = buildTextMessageBlock(
+      makeMessage({ author: botAuthor, content: 'hello' }),
+      {},
+      null,
+      undefined,
+      null,
+      { ...defaultTextFormatOptions, botIndicator: 'include' } as TextFormatOptions,
+    ).join('\n');
+    expect(block).toContain('@Helper [BOT]');
   });
 });

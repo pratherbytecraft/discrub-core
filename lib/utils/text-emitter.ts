@@ -5,6 +5,7 @@
 // export pipeline; reusable by any future lib consumer that needs a
 // text-format output of a Discord message list.
 
+import { coreMessages } from "../messages/core-messages.ts";
 import type { Message } from "../types/discord-types.ts";
 import type { ExportUserMap } from "../types/discrub-types.ts";
 import type {
@@ -49,7 +50,7 @@ function resolveAuthorName(
   cachedUserMap: ExportUserMap,
   guildId: string | null,
 ): string {
-  if (!message.author) return "Unknown";
+  if (!message.author) return coreMessages().textUnknownAuthor();
   const data = getUserDisplayData(message.author.id, cachedUserMap, guildId);
   // Prefer the resolved display name (nickname > display > username); fall
   // back to the raw author.username on the message envelope itself.
@@ -59,7 +60,7 @@ function resolveAuthorName(
     data.username ||
     message.author.global_name ||
     message.author.username ||
-    "Unknown"
+    coreMessages().textUnknownAuthor()
   );
 }
 
@@ -89,11 +90,13 @@ function buildAuthorLine(
 ): string {
   const author = resolveAuthorName(message, cachedUserMap, guildId);
   const botSuffix =
-    options.botIndicator === "include" && isBotAuthor(message) ? " [BOT]" : "";
+    options.botIndicator === "include" && isBotAuthor(message)
+      ? ` ${coreMessages().textBotTag()}`
+      : "";
   if (options.timestamps === "skip") return `@${author}${botSuffix}`;
   const created = formatTimestamp(message.timestamp, exportConfig);
   const edited = formatTimestamp(message.edited_timestamp, exportConfig);
-  const editedSuffix = edited ? `, edited ${edited}` : "";
+  const editedSuffix = edited ? `, ${coreMessages().textEdited(edited)}` : "";
   const timestampPart = created ? ` (${created}${editedSuffix})` : "";
   return `@${author}${botSuffix}${timestampPart}`;
 }
@@ -113,17 +116,17 @@ function buildReplyLine(
   const referenced = message.referenced_message;
   if (!referenced) {
     if (options.replies === "link") {
-      return "> (referenced message unavailable)";
+      return `> ${coreMessages().textReplyUnavailable()}`;
     }
     return null;
   }
   const author = resolveAuthorName(referenced, cachedUserMap, guildId);
   if (options.replies === "link") {
-    return `> reply to @${author}`;
+    return `> ${coreMessages().textReplyTo(author)}`;
   }
   const snippet = singleLine(referenced.content || "");
   if (!snippet) {
-    return `> @${author}: (no content)`;
+    return `> @${author}: ${coreMessages().textReplyNoContent()}`;
   }
   return `> @${author}: ${truncate(snippet, REPLY_SNIPPET_MAX)}`;
 }
@@ -136,13 +139,13 @@ function buildAttachmentLines(
   if (options.attachmentStyle === "skip") return [];
   if (!message.attachments || message.attachments.length === 0) return [];
   return message.attachments.map((att) => {
-    const filename = att.filename || "attachment";
+    const filename = att.filename || coreMessages().textAttachmentName();
     if (options.attachmentStyle === "sidecar") {
       const local = mediaMaps?.mediaMap?.[att.url];
       const target = local || att.url;
-      return `[Attachment: ${filename} — ${target}]`;
+      return coreMessages().textAttachment(filename, target);
     }
-    return `[Attachment: ${filename} — ${att.url}]`;
+    return coreMessages().textAttachment(filename, att.url);
   });
 }
 
@@ -167,7 +170,7 @@ function buildReactionsLine(
     const count = r.count ?? 0;
     return `${label} ×${count}`;
   });
-  return `Reactions: ${parts.join(", ")}`;
+  return coreMessages().textReactions(parts.join(", "));
 }
 
 function buildSystemBlock(
@@ -178,7 +181,8 @@ function buildSystemBlock(
   options: TextFormatOptions,
 ): string {
   const author = resolveAuthorName(message, cachedUserMap, guildId);
-  const content = singleLine(getMessageContent(message)) || "system event";
+  const content = singleLine(getMessageContent(message)) ||
+    coreMessages().textSystemEvent();
   const ts =
     options.timestamps === "skip"
       ? null
@@ -225,7 +229,7 @@ export function buildTextMessageBlock(
       ? message.message_snapshots[0]?.message ?? null
       : null;
   if (snapshot) {
-    lines.push("[Forwarded]");
+    lines.push(coreMessages().textForwarded());
     const forwardedBody = snapshot.content ?? "";
     if (forwardedBody) {
       for (const bodyLine of forwardedBody.split("\n")) {
@@ -238,11 +242,11 @@ export function buildTextMessageBlock(
       options.attachmentStyle !== "skip"
     ) {
       for (const att of snapshot.attachments) {
-        const filename = att.filename || "attachment";
+        const filename = att.filename || coreMessages().textAttachmentName();
         const local = mediaMaps?.mediaMap?.[att.url];
         const target =
           options.attachmentStyle === "sidecar" && local ? local : att.url;
-        lines.push(`[Attachment: ${filename} — ${target}]`);
+        lines.push(coreMessages().textAttachment(filename, target));
       }
     }
   }

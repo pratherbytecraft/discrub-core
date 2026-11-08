@@ -116,7 +116,8 @@ describe('ReactionEnrichmentService', () => {
       await service.generateReactionMap(messages);
 
       expect(paginatedFetchSpy).toHaveBeenCalled();
-      expect(paginatedFetchSpy).toHaveBeenCalledWith(expect.any(Function));
+      // 1.0.19: the fetch, no batch handler, and the refused-page callback.
+      expect(paginatedFetchSpy).toHaveBeenCalledWith(expect.any(Function), undefined, expect.any(Function));
     });
 
     it('should handle normal reactions', async () => {
@@ -200,6 +201,59 @@ describe('ReactionEnrichmentService', () => {
       const result = await service.generateReactionMap(messages);
 
       expect(result.reactionMap['msg1']).toEqual({});
+    });
+  });
+
+  // 1.0.19: a refused lookup is counted instead of vanishing.
+  describe('Refused lookups', () => {
+    // Earlier tests leave a mocked paginatedFetch on the prototype; these need the real one.
+    beforeEach(() => {
+      vi.restoreAllMocks();
+      vi.spyOn(utils, 'getEncodedEmoji').mockReturnValue('👍');
+    });
+
+    it('counts the lookups Discord refused and names their messages', async () => {
+      const messages = [createMsg('ok-1', true), createMsg('bad-2', true), createMsg('bad-3', true)];
+      mockApiClient.getReactions = vi.fn(async (_t: string, _c: string, messageId: string) =>
+        messageId.startsWith('bad')
+          ? { success: false, status: 404 }
+          : { success: true, data: [createUser('user1')] });
+      const result = await service.generateReactionMap(messages);
+      // A 404 or 403 is recorded and the walk goes on.
+      expect(result.failed).toBe(2);
+      expect(result.failedMessageIds).toEqual(['bad-2', 'bad-3']);
+      expect(result.failures).toEqual([
+        { messageId: 'bad-2', emoji: '👍', status: 404 },
+        { messageId: 'bad-3', emoji: '👍', status: 404 },
+      ]);
+      expect(result.signInExpired).toBe(false);
+      expect(Object.keys(result.reactionMap['ok-1'])).toHaveLength(1);
+      expect(Object.values(result.reactionMap['bad-2'])[0]).toEqual([]);
+      expect(mockApiClient.getReactions).toHaveBeenCalledTimes(3);
+    });
+
+    it('stops at a 401 since every later lookup would fail the same way', async () => {
+      const messages = [createMsg('ok-1', true), createMsg('expired-2', true), createMsg('never-3', true)];
+      mockApiClient.getReactions = vi.fn(async (_t: string, _c: string, messageId: string) =>
+        messageId.startsWith('expired')
+          ? { success: false, status: 401 }
+          : { success: true, data: [createUser('user1')] });
+      const result = await service.generateReactionMap(messages);
+      expect(result.signInExpired).toBe(true);
+      expect(result.failed).toBe(1);
+      expect(result.failures[0]).toMatchObject({ messageId: 'expired-2', status: 401 });
+      expect(result.reactionMap['never-3']).toBeUndefined();
+      expect(mockApiClient.getReactions).toHaveBeenCalledTimes(2);
+    });
+
+    it('reports zero when every lookup answered', async () => {
+      const messages = [createMsg('ok-1', true)];
+      mockApiClient.getReactions = vi.fn(async () => ({ success: true, data: [createUser('user1')] }));
+      const result = await service.generateReactionMap(messages);
+      expect(result.failed).toBe(0);
+      expect(result.failedMessageIds).toEqual([]);
+      expect(result.failures).toEqual([]);
+      expect(result.signInExpired).toBe(false);
     });
   });
 

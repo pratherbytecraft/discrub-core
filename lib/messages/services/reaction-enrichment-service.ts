@@ -4,7 +4,9 @@ import type {
   ExportReaction,
   ReactionEnrichmentConfig,
   ReactionEnrichmentResult,
+  ReactionLookupFailure,
   ProgressPhase,
+  APIResponse,
 } from "../types.ts";
 import type { ExportReactionMap } from "../../types/discrub-types.ts";
 import type { Reaction } from "../../types/discord-types.ts";
@@ -29,6 +31,13 @@ export class ReactionEnrichmentService {
   async generateReactionMap(messages: Message[]): Promise<ReactionEnrichmentResult> {
     const reactionMap: ExportReactionMap = {};
     const filteredMessages = messages.filter((m) => !!m.reactions?.length);
+    // 1.0.19: a refused lookup used to leave an empty reactor list and no
+    // trace, so an export could finish looking complete. Count them so the
+    // caller can decide what a missing reactor list means.
+    let failed = 0;
+    const failedMessageIds: string[] = [];
+    const failures: ReactionLookupFailure[] = [];
+    let signInExpired = false;
 
     for (const [mI, message] of filteredMessages.entries()) {
       reactionMap[message.id] = {};
@@ -55,6 +64,12 @@ export class ReactionEnrichmentService {
             message,
             encodedEmoji,
             reaction,
+            (response) => {
+              failed += 1;
+              failures.push({ messageId: message.id, emoji: encodedEmoji, status: response.status });
+              if (failedMessageIds[failedMessageIds.length - 1] !== message.id) failedMessageIds.push(message.id);
+              if (response.status === 401) signInExpired = true;
+            },
           );
 
           this.emitProgress(
@@ -63,13 +78,23 @@ export class ReactionEnrichmentService {
             filteredMessages.length,
             `Processing reactions for message ${mI + 1}`,
           );
+
+          // A deleted message (404) or one the user can no longer read (403)
+          // is recorded and the walk goes on; only an expired sign in (401)
+          // ends it, since every later call would fail the same way.
+          if (signInExpired) break;
         }
       }
+      if (signInExpired) break;
     }
 
     return {
       messages,
       reactionMap,
+      failed,
+      failedMessageIds,
+      failures,
+      signInExpired,
     };
   }
 
@@ -81,6 +106,7 @@ export class ReactionEnrichmentService {
     message: Message,
     encodedEmoji: string,
     reaction: Reaction,
+    onFailure?: (response: APIResponse<User[]>) => void,
   ): Promise<ExportReaction[]> {
     const exportReactions: ExportReaction[] = [];
     const normalCount = reaction.count_details?.normal ?? reaction.count ?? 0;
@@ -103,6 +129,8 @@ export class ReactionEnrichmentService {
             type,
             lastId,
           ),
+        undefined,
+        onFailure,
       );
 
       users.forEach((u) => {

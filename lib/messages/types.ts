@@ -193,9 +193,25 @@ export interface MessageFetchResult {
   searchCriteria?: SearchCriteria;
 }
 
+/** 1.0.19: one reactor lookup Discord refused. */
+export interface ReactionLookupFailure {
+  messageId: string;
+  emoji: string;
+  /** The HTTP status when the answer carried one (404 message gone, 403 no access, 401 sign in). */
+  status?: number;
+}
+
 export interface ReactionEnrichmentResult {
   messages: Message[];
   reactionMap: ExportReactionMap;
+  /** 1.0.19: reactor lookups Discord refused (a page that came back unsuccessful). */
+  failed: number;
+  /** 1.0.19: the messages with at least one refused lookup, in order. */
+  failedMessageIds: string[];
+  /** 1.0.19: every refusal with its status, in order. */
+  failures: ReactionLookupFailure[];
+  /** 1.0.19: a lookup answered 401; the walk stopped there since nothing more could succeed. */
+  signInExpired: boolean;
 }
 
 export interface UserEnrichmentResult {

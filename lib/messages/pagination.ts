@@ -24,6 +24,8 @@ export class PaginationHelper {
   async paginatedFetch<T extends { id: string }>(
     fetchFn: (lastId: string | null) => Promise<APIResponse<T[]>>,
     onBatch?: (batch: T[]) => void | Promise<void>,
+    /** 1.0.19: called once when a page comes back unsuccessful, which ends the walk. */
+    onFailure?: (response: APIResponse<T[]>) => void,
   ): Promise<T[]> {
     const allResults: T[] = [];
     let lastId: string | null = null;
@@ -32,7 +34,9 @@ export class PaginationHelper {
     while (!reachedEnd) {
       if (await this.shouldStop()) break;
 
-      const { success, data } = await fetchFn(lastId);
+      const response = await fetchFn(lastId);
+      const { success, data } = response;
+      if (!success) onFailure?.(response);
 
       if (success && data && data.length > 0) {
         allResults.push(...data);

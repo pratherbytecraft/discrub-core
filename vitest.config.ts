@@ -31,6 +31,8 @@ export default defineConfig({
 
     // Global setup
     globals: true,
+    // The gap between API calls is off for the suite; the gate's own tests turn it on.
+    setupFiles: ['lib/test-setup.ts'],
 
     // Timeout configuration
     testTimeout: 10000,

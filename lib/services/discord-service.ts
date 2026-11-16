@@ -135,6 +135,59 @@ const notifyRateLimitListener = (event: RateLimitEvent) => {
   }
 };
 
+/**
+ * One gate for every API call, shared by every DiscordService instance
+ * like the cooldown above. Each call takes the next free start time, at
+ * least `minGapMs` after the one before it plus up to `jitterMs` of
+ * random, so two loops running side by side (a Purge and the open feed,
+ * an export and a member lookup) cannot send calls back to back. A loop
+ * that already waits longer than the gap between its calls never feels
+ * it. Media downloads go to the CDN and are not held.
+ */
+const callGate = { nextStartMs: 0, lastStartMs: 0, minGapMs: 500, jitterMs: 150 };
+
+/** Change the gap between API calls. `minGapMs` of 0 turns the gate off (tests). */
+export const setCallGate = (options: { minGapMs?: number; jitterMs?: number }) => {
+  if (options.minGapMs !== undefined) callGate.minGapMs = Math.max(0, options.minGapMs);
+  if (options.jitterMs !== undefined) callGate.jitterMs = Math.max(0, options.jitterMs);
+  callGate.nextStartMs = 0;
+  callGate.lastStartMs = 0;
+};
+
+/** Test hook: forget the last call's start time. */
+export const resetCallGate = () => {
+  callGate.nextStartMs = 0;
+  callGate.lastStartMs = 0;
+};
+
+/**
+ * Take the next start time and wait for it. The slot is taken before the
+ * wait, so callers that arrive together leave in the order they came.
+ * Answers whether it had to wait.
+ */
+const takeCallSlot = async (): Promise<boolean> => {
+  if (callGate.minGapMs <= 0) return false;
+  let waited = false;
+  const now = Date.now();
+  const start = Math.max(now, callGate.nextStartMs);
+  callGate.nextStartMs = start + callGate.minGapMs + Math.random() * callGate.jitterMs;
+  if (start > now) {
+    await wait((start - now) / 1000);
+    waited = true;
+  }
+  // A caller ahead can wake late (a busy page delays its timer) and so
+  // start late. The gap is kept from when it really started, not from
+  // when it was due.
+  for (;;) {
+    const since = Date.now() - callGate.lastStartMs;
+    if (since >= callGate.minGapMs) break;
+    await wait((callGate.minGapMs - since) / 1000);
+    waited = true;
+  }
+  callGate.lastStartMs = Date.now();
+  return waited;
+};
+
 /** Test hook: forget any shared cooldown. */
 export const resetRateLimitState = () => {
   rateLimitState.cooldownUntilMs = 0;
@@ -334,6 +387,14 @@ class DiscordService {
             notifyRateLimitListener({ type: "cooldownWait", waitMs: cooldownMs });
           }
           await wait(cooldownMs / 1000);
+        }
+
+        // Every API call waits its turn at the gate. A retry after a 429
+        // takes a new turn once its cooldown is over.
+        if (!isBlob) {
+          // A 429 that landed while this call waited its turn: go back and
+          // wait that out too, so nothing fires into the cooldown.
+          if ((await takeCallSlot()) && getRateLimitCooldownMs() > 0) continue;
         }
 
         const response = await promise();

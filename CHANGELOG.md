@@ -5,6 +5,16 @@ All notable changes to `discrub-core` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.21] - 2026-11-16
+
+### Added
+
+- One gate for every API call. Calls from any `DiscordService` instance start
+  at least 500 ms apart, plus up to 150 ms of random, in the order they were
+  made. Media downloads are not held. `setCallGate({ minGapMs, jitterMs })`
+  changes the gap (0 turns it off) and `resetCallGate()` forgets the last
+  start time.
+
 ## [1.0.18] - 2026-11-01
 
 ### Added
